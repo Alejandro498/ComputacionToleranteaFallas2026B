@@ -2,7 +2,7 @@
 
 * **Sistemas tolerantes a fallas:** Son sistemas diseñados para continuar operando correctamente (posiblemente a un nivel de rendimiento reducido o "degradación elegante") incluso en presencia de fallas de hardware o software, evitando una caída total del servicio.
 * **Falla (*Fault*):** Es la causa raíz física, lógica o de diseño de una anomalía interna (por ejemplo, una celda de memoria defectuosa, un cable desconectado o un *bug* en el código).
-* **Error (*Error*):** Es la manifestación interna de una falla; representa un estado incorrecto dentro del sistema (por ejemplo, un bit invertido en la memoria o un valor de variable corrupto). Si no se maneja, un error puede provocar una **avería/fracaso (*Failure*)**, que es cuando el sistema incumple su especificación ante el usuario.
+* **Error (*Error*):** Es la manifestación interna de una falla; representa un estado incorrecto dentro del sistema (por ejemplo, un bit invertido en la memoria o un valor de variable corrupto). Si no se maneja, un error puede provocar una avería/fracaso (*Failure*), que es cuando el sistema incumple su especificación ante el usuario.
 * **Latencia de un fallo (*Fault Latency*):** Es el intervalo de tiempo que transcurre desde que la falla ocurre físicamente o se introduce en el sistema hasta que se manifiesta como un error en el estado interno.
 * **Latencia de un error (*Error Latency*):** Es el tiempo transcurrido desde que se genera el error en el estado interno hasta que es detectado por los mecanismos del sistema o produce una avería visible externa.
 
