@@ -10,7 +10,7 @@ Para probar el linter, escribí a propósito mal una variable dentro de mi funci
 
 Gracias a ESLint, no tuve que esperar a ejecutar el programa o abrir el navegador para darme cuenta. La herramienta analizó mi código y me marcó la variable indefinida inmediatamente en el editor, obligándome a corregir el error tipográfico antes de guardar.
 
-![ESLint marcando el error en el código](Imagenes\ESLint.png) 
+![ESLint marcando el error en el código](Imagenes/ESLint.png) 
 
 ---
 
@@ -22,7 +22,7 @@ Creé un archivo `calculos.test.js` para asegurar que mi función procesara los 
 
 Al ejecutar `npm test`, Jest corrió ambos escenarios de forma automática y confirmó que las reglas de mi código estaban bien establecidas, pasando ambas pruebas exitosamente.
 
-![Jest](Imagenes\Jest.png)
+![Jest](Imagenes/Jest.png)
 
 ---
 
@@ -31,17 +31,17 @@ Al ejecutar `npm test`, Jest corrió ambos escenarios de forma automática y con
 Finalmente, quería ver qué pasa cuando el código ya está montado en un servidor web y un usuario rompe la aplicación. 
 
 Conecté Sentry a mi servidor con Express y configuré la ruta de pagos para que siempre intentara aplicar el descuento inválido del 200%. 
-![Codigo Sentry Error](Imagenes\SentryCodeError.png)
+![Codigo Sentry Error](Imagenes/SentryCodeError.png)
 
 Para forzar el fallo "en vivo", abrí mi navegador y visité la ruta `http://localhost:3000/procesar-pago`.
 
 Como era de esperarse, la página detuvo su ejecución por el error matemático:
 
-![Error forzado en el navegador](Imagenes\SentryError.png)
+![Error forzado en el navegador](Imagenes/SentryError.png)
 
 Pero lo interesante pasó detrás de escena. Inmediatamente **Sentry** atrapó la excepción, me envió un correo de alerta y registró el incidente en su panel web. Ahí pude ver exactamente que falló, qué navegador lo provocó y todo el contexto necesario para solucionarlo.
 
-![Sentry capturando el error en el panel](Imagenes\SentryWeb2.png)
+![Sentry capturando el error en el panel](Imagenes/SentryWeb2.png)
 
 ---
 
