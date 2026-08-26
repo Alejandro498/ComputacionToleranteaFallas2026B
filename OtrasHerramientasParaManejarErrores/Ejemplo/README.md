@@ -19,6 +19,7 @@ Gracias a ESLint, no tuve que esperar a ejecutar el programa o abrir el navegado
 Creé un archivo `calculos.test.js` para asegurar que mi función procesara los descuentos correctamente y, más importante aún, que fallara cuando debía hacerlo. Hice dos escenarios:
 1. **El camino feliz:** Que un descuento normal del 10% se aplique bien.
 2. **Forzando un error:** Que si envío un descuento ilógico (como 200%), la función detecte el número negativo y lance una excepción ("El total no puede ser negativo").
+![Código para probar Jest](Imagenes/JestCode.png) 
 
 Al ejecutar `npm test`, Jest corrió ambos escenarios de forma automática y confirmó que las reglas de mi código estaban bien establecidas, pasando ambas pruebas exitosamente.
 
@@ -39,7 +40,7 @@ Como era de esperarse, la página detuvo su ejecución por el error matemático:
 
 ![Error forzado en el navegador](Imagenes/SentryError.png)
 
-Pero lo interesante pasó detrás de escena. Inmediatamente **Sentry** atrapó la excepción, me envió un correo de alerta y registró el incidente en su panel web. Ahí pude ver exactamente que falló, qué navegador lo provocó y todo el contexto necesario para solucionarlo.
+Pero lo interesante pasó despues. Inmediatamente **Sentry** atrapó la excepción, me envió un correo de alerta y registró el incidente en su panel web. Ahí pude ver exactamente que falló, qué navegador lo provocó y todo el contexto necesario para solucionarlo.
 
 ![Sentry capturando el error en el panel](Imagenes/SentryWeb2.png)
 
