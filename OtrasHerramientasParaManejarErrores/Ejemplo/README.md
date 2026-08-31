@@ -1,4 +1,4 @@
-# Práctica: Herramientas para el Manejo de Errores en Node.js 🛠️
+# Práctica: Herramientas para el Manejo de Errores en Node.js
 
 Probe tres herramientas útiles para el manejo de errores en el código: **ESLint** (para prevenirlos al escribir), **Jest** (para probar que la lógica funcione) y **Sentry** (para atrapar los fallos cuando el proyecto ya está corriendo).
 
