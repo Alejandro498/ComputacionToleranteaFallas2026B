@@ -45,17 +45,13 @@ No basta con “guardar el modelo”. El estado que serializo en `checkpoints/ch
 
 La escritura es **atómica**: se escribe un `.tmp`, el checkpoint anterior pasa a `.prev` y luego se reemplaza el archivo principal. Así un corte a mitad de escritura no deja un pickle a medias como único backup.
 
-```mermaid
-flowchart LR
-    A[Entrenar época N] --> B{N múltiplo de 10?}
-    B -->|sí| C[Escribir checkpoint.tmp]
-    C --> D[Renombrar al checkpoint.pkl]
-    B -->|no| E[Siguiente época]
-    D --> E
-    F[Falla / crash] --> G[Relanzar train.py]
-    G --> H[Cargar checkpoint.pkl]
-    H --> I[Continuar en N+1]
-```
+El ciclo, en la práctica, es este:
+
+1. Se entrena una época y se actualizan pesos, loss e historial.
+2. Si la época es múltiplo de 10 (o es la última), ese estado se escribe a disco.
+3. Si no toca guardar, se sigue con la siguiente época.
+4. Si el proceso se cae, al volver a lanzar `train.py` se lee `checkpoint.pkl`.
+5. Se restauran época, pesos e historial, y el bucle arranca en **N+1**, no en 1.
 
 ---
 
