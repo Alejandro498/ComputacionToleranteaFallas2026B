@@ -1,12 +1,12 @@
 # Práctica: Restaurar el estado de ejecución (Application Checkpointing)
 
-Implementé **checkpointing a nivel de aplicación**: un programa que hace un trabajo largo (entrenar un clasificador 2D), guarda periódicamente su estado en disco y, si se cae, **reanuda desde el último checkpoint** en lugar de empezar de cero.
+Implementé **checkpointing a nivel de aplicación**: entrenar un clasificador 2D, guarda periódicamente su estado en disco y, si se cae, **reanuda desde el último checkpoint** en lugar de empezar de cero.
 
 El checkpointing es una técnica de tolerancia a fallas. La idea es no perder el progreso cuando hay una falla transitoria (se cierra la terminal, se acaba la batería, se mata el proceso).
 
 ---
 
-## 1. El trabajo largo: un clasificador 2D
+## 1. El trabajo: un clasificador 2D
 
 Necesitaba un proceso que durara varias iteraciones, para que guardar y restaurar el estado tuviera sentido. Usé un clasificador sencillo: puntos en un plano con forma de dos lunas.
 
