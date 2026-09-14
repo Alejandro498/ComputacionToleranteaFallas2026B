@@ -71,17 +71,29 @@ python pedidos.py
 
 Eso levanta **4 hilos worker** y **24 pedidos**, con fallas transitorias al 30% y hasta 3 intentos. Sirve para capturar el arranque, el intercalado de logs y el resumen.
 
-Demo de la condición de carrera (sin fallas simuladas; los hilos se pisan el stock):
+Demo de la condición de carrera:
 
 ```bash
 python pedidos.py --unsafe --workers 4 --orders 30 --delay 0.2
 ```
 
-Menos hilos, para comparar la consola:
+En `--unsafe` el hilo principal **no pausa** al encolar, así que los 30 pedidos entran a la cola de golpe. Los workers arrancan un poco después y se encuentran el trabajo ya apilado: chocan sobre el mismo stock (el `--delay 0.2` es la ventana entre el `SELECT` y el `UPDATE`, no una pausa del productor). En la captura se ve `UNSAFE` y un bloque largo de `encola pedido` antes de que terminen de aparecer los cuatro `arranca`.
+
+![Encolar de golpe en modo UNSAFE](Imagenes/consola_unsafe.png)
+
+Cuando ya está la cola llena, los cuatro workers la vacían en un segundo: los `OK` se pisan entre `worker-1` … `worker-4`. La señal de corte llega mientras todavía quedan pedidos; por eso `worker-3` cierra y, justo después, `worker-2` aún cobra el #28 y `worker-4` el #29.
+
+![Workers vaciando la cola en modo UNSAFE](Imagenes/consola_unsafe_workers.png)
+
+Menos hilos, sin fallas simuladas, para ver el intercalado limpio:
 
 ```bash
 python pedidos.py --workers 2 --orders 12 --fail-rate 0
 ```
+
+Solo `worker-1` y `worker-2`. Cada `encola` del `MainThread` lo cobra uno de los dos a la primera (`intento=1/3`), sin `ERROR` ni reintentos. Los 12 pedidos salen `OK`, 0 fallidos, y el invariante sigue en verde: 2 hilos bastan si la transacción está bien.
+
+![Corrida con 2 workers y fail-rate 0](Imagenes/consola_dos_workers.png)
 
 Otras banderas: `--fail-rate 0.3`, `--max-attempts 3`, `--delay 0.15`, `--seed 42`.
 
