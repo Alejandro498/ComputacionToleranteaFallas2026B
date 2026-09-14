@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 checkpoints/
 artifacts/
+*.db
+*.db-wal
+*.db-shm
