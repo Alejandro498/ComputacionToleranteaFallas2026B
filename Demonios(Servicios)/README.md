@@ -81,9 +81,25 @@ python proceso_a.py --intervalo 0.5 --fallar-tras 4
 
 ## Qué se ve en la demo
 
+La demo y el servicio de Windows son los mismos dos programas. `--demo` adelanta la falla a propósito, para que quepa en una pantalla: el proceso A muere, el demonio lo levanta, muere otra vez, lo levanta otra vez, y a la tercera se apaga en orden. El servicio instalado corre `demonio_b.py` sin `--demo`, así que no falla solo. Lo que se ve aquí es lo que le pasa a ese servicio si el proceso A se muere.
+
 El primer proceso (pid 29432) anota 1, 2 y 3 y revienta con `RuntimeError`. El demonio lee el código 1 y lanza otro proceso. Ese sigue en la secuencia 4, no en 1. Tras el segundo crash, el tercer proceso (pid 11084) anota 7, 8 y 9 y sale en orden. El demonio no lo reinicia. Abajo, la bitácora deja las dos fallas, el cambio de pid y el apagado ordenado.
 
 ![Demo: dos fallas, dos reinicios y apagado ordenado](Imagenes/consola_demo.png)
+
+---
+
+## Registrado como servicio de Windows
+
+Esto es el sistema en marcha, no otro programa. El demonio quedó instalado con NSSM bajo el nombre **BitacoraSensor**, sin `--demo`. Windows lo arranca solo (inicio automático), sin terminal, y la cuenta con la que corre es **Local System**, no la del usuario que inició sesión. Se queda anotando la temperatura hasta que algo mate al proceso A o se detenga el servicio. Si el proceso A muere, reacciona como en la demo.
+
+En Servicios se ve el nombre, el estado Running, el tipo Automatic y Log On As Local System:
+
+![Bitacora del sensor en Servicios de Windows](Imagenes/servicio_windows.png)
+
+Con el servicio ya en marcha, maté el proceso A (`taskkill` al pid de `datos/servicio.pid`). El demonio, que sigue vivo como servicio, lo registró y lanzó otro proceso. La secuencia no volvió a 1: el pid 32612 iba en la lectura 78 y el pid 29908 siguió en la 79.
+
+La forma de registrar un script de Python como servicio de Windows, con NSSM, está tomada de [Crear servicios para Windows con Python](https://python.tecnobillo.com/sections/python-en-windows/servicios-windows-python/servicios-windows-python.html). Ahí el ejemplo cierra procesos ajenos; aquí el script es la bitácora y el demonio que la reinicia.
 
 ---
 

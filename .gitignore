@@ -7,3 +7,4 @@ artifacts/
 *.db
 *.db-wal
 *.db-shm
+nssm/
