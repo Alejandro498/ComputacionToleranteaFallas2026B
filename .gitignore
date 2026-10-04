@@ -8,3 +8,7 @@ artifacts/
 *.db-wal
 *.db-shm
 nssm/
+.venv/
+salida/
+salida_*.txt
+.prefect/
