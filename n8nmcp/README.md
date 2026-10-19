@@ -6,7 +6,7 @@ La idea une tres piezas:
 
 - **MCP (Model Context Protocol)** — servidor de tools que se ejecutan .
 - **n8n** — workflow que orquesta el escenario por webhook y llama esas tools vía un bridge HTTP.
-- **Gemini** (`gemini-3.5-flash-lite`) — LLM que, en el camino de n8n, decide la acción de recuperación a partir del contexto leído por MCP.
+- **Gemini** (`gemini-3.5-flash-lite`) — LLM que, en el camino de n8n, **llama tools MCP** (function calling): lee métricas/checkpoints y aplica la recuperación.
 
 Así se demuestra tolerancia a fallas en un pipeline de ML: detectar la falla, decidir con evidencia (LLM o heurística) y recuperar el run.
 
@@ -26,7 +26,7 @@ En este proyecto el servidor MCP es `trainguard/mcp_server.py` (entrada para Cla
 | MCP server  | Caja de tools (`mcp_server.py`)                            |
 | Tool        | Acción real (inyectar falla, listar checkpoints, rollback) |
 | Cliente MCP | Claude Desktop **o** el bridge usado por n8n               |
-| Gemini      | Decide la acción en el flujo automatizado de n8n           |
+| Gemini      | Cliente MCP vía function calling (decide y aplica)         |
 | n8n         | Orquesta el flujo y dispara el bridge                      |
 
 
@@ -46,7 +46,7 @@ Un entrenamiento puede “seguir corriendo” pero estar roto: loss en NaN, lear
 
 - **MCP** define las capacidades del agente (tools estables, reutilizables).
 - **n8n** automatiza: webhook → start → inject fault → analyze/apply → respuesta.
-- **Gemini** razona sobre métricas/checkpoints obtenidos por MCP y elige la recuperación.
+- **Gemini** es cliente MCP: pide tools, lee evidencia y llama `apply_recovery_action`.
 - **Claude Desktop** usa las *mismas* tools a mano, para demostrar el servidor MCP sin n8n.
 
 
@@ -82,9 +82,9 @@ Claude Desktop ──(MCP stdio)──► mcp_server.py ──► engine.py
                                                       ▲
 n8n ──HTTP──► ngrok ──► bridge ──(MCP Client)─────────┘
                          │
-                         ├── lee métricas/checkpoints (MCP)
-                         ├── Gemini decide acción (API)
-                         └── aplica recovery (MCP)
+                         ├── Gemini (function calling) pide tools MCP
+                         ├── MCP: get_training_status / metrics / checkpoints
+                         ├── MCP: apply_recovery_action (si confía)
                          └── /dashboard (feed visual)
 ```
 
@@ -102,7 +102,7 @@ n8n ──HTTP──► ngrok ──► bridge ──(MCP Client)─────
 | `runs/current_run.json`            | Estado del run actual                                |
 
 
-n8n Cloud no habla MCP stdio; el **bridge** traduce HTTP a **llamadas MCP**. Con `USE_GEMINI=true`, la decisión la toma Gemini; sin key, cae a heurística local.
+n8n Cloud no habla MCP stdio; el **bridge** traduce HTTP a **llamadas MCP**. Con `USE_GEMINI=true` y `GEMINI_MCP_AGENT=true` (default), **Gemini elige y ejecuta tools MCP** (como Claude Desktop). Sin key, cae a heurística local. Con `GEMINI_MCP_AGENT=false` queda el modo legacy (Gemini solo JSON; el bridge aplica).
 
 ---
 
@@ -126,14 +126,16 @@ pip install -r requirements.txt
 
 ```powershell
 copy .env.example .env
-# Edita .env: GEMINI_API_KEY=...  GEMINI_MODEL=gemini-3.5-flash-lite  USE_GEMINI=true
+# Edita .env: GEMINI_API_KEY=...  GEMINI_MODEL=gemini-3.5-flash-lite
+#             USE_GEMINI=true  GEMINI_MCP_AGENT=true
 ```
 
-Flujo de `/analyze-and-apply` con Gemini:
+Flujo de `/analyze-and-apply` con Gemini + MCP (function calling):
 
-1. Lee contexto con tools MCP (`get_training_status`, `get_latest_metrics`, `list_checkpoints`)
-2. **Gemini** decide la acción (JSON)
-3. Aplica con tool MCP `apply_recovery_action`
+1. El bridge expone a Gemini las tools MCP (schemas)
+2. **Gemini** llama MCP: lee `get_training_status` / `get_latest_metrics` / `list_checkpoints`
+3. **Gemini** decide y llama MCP `apply_recovery_action` (si `confidence` alta)
+4. Responde JSON (`decided_by: gemini_mcp`, `llm_uses_mcp: true`)
 
 > No pegues la API key en chats ni en el README. Si se filtró, revócala y genera otra.
 
@@ -214,7 +216,7 @@ Invoke-RestMethod -Method Post `
 | **Start Training**     | HTTP Request   | `POST {bridge}/start` → el bridge llama la tool MCP `start_training`. Solo en path `demo`.                          |
 | **Inject Fault**       | HTTP Request   | `POST {bridge}/inject-fault` → MCP `inject_fault` + `advance_epochs` (aparecen métricas con la falla). Path `demo`. |
 | **Inject Fault Only**  | HTTP Request   | Igual que inject, pero sin pasar por start (path `inject`).                                                         |
-| **Analyze and Apply**  | HTTP Request   | `POST {bridge}/analyze-and-apply` → lee contexto por MCP, **Gemini decide**, aplica recovery por MCP.               |
+| **Analyze and Apply**  | HTTP Request   | `POST {bridge}/analyze-and-apply` → **Gemini llama tools MCP** (lee + aplica recovery).                             |
 | **Get Status**         | HTTP Request   | `GET {bridge}/status` → tool MCP `get_training_status` para confirmar el estado final.                              |
 | **Build Summary**      | Code           | Arma la respuesta: `decided_by`, `model`, tools MCP usadas, acción, evidencia, banner.                              |
 | **Respond to Webhook** | Respond        | Devuelve el JSON resumen al cliente que llamó el webhook.                                                           |
@@ -240,11 +242,13 @@ Claude carga la integración `trainguard`, ejecuta las tools y reporta NaN en la
 
 ### Camino B — n8n + MCP + Gemini
 
-El webhook dispara el workflow; el bridge usa MCP para leer el estado y Gemini (`gemini-3.5-flash-lite`) para decidir. En la respuesta se ve:
+El webhook dispara el workflow; Gemini (`gemini-3.5-flash-lite`) actúa como cliente MCP (function calling). En la respuesta se ve:
 
-- `decided_by: gemini`
+- `decided_by: gemini_mcp`
+- `llm_uses_mcp: True`
 - `model: gemini-3.5-flash-lite`
 - `called_via_mcp: True`
+- `gemini_requested_mcp_tools: [...]` (tools que el LLM pidió)
 - `mcp_story: n8n → bridge → MCP:get_training_status → … → MCP:apply_recovery_action`
 - `action: rollback_checkpoint`, `applied: True`
 
@@ -333,10 +337,10 @@ El dashboard muestra en vivo cada tool MCP invocada desde n8n (`start_training`,
 
 ### MCP / agente
 
-- Function-calling nativo de Gemini sobre las tools MCP (en lugar de JSON en un solo prompt).
 - Probar `GEMINI_MODEL=gemini-3.8-flash` u otros modelos.
 - Resources MCP (no solo tools): exponer `metrics://latest` o el runbook como recurso.
 - Auth y scopes en tools peligrosas (`stop_training`, `inject_fault`).
+- Dejar que Gemini también elija el `mode` del workflow n8n (no solo analyze).
 
 
 
@@ -370,4 +374,4 @@ El dashboard muestra en vivo cada tool MCP invocada desde n8n (`start_training`,
 
 ## Conclusión
 
-TrainGuard muestra tolerancia a fallas en entrenamiento: se inyecta una falla, se recoge evidencia y se recupera (rollback / LR). **MCP** estandariza las tools; **Claude** las usa de forma interactiva; **n8n** orquesta el flujo; **Gemini** decide la acción en el camino automatizado, siempre aplicando el resultado a través de tools MCP. El dashboard hace visible que cada paso de n8n termina en una llamada MCP real, no en un prompt suelto.
+TrainGuard muestra tolerancia a fallas en entrenamiento: se inyecta una falla, se recoge evidencia y se recupera (rollback / LR). **MCP** estandariza las tools; **Claude** y **Gemini** las usan como clientes (stdio vs function calling en el bridge); **n8n** orquesta el flujo. El dashboard hace visible que las tools las pide el LLM o el bridge, siempre por MCP.

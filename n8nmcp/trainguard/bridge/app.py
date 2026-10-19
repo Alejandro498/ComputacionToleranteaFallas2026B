@@ -16,9 +16,15 @@ from trainguard.bridge.mcp_gateway import (
     clear_event_log,
     get_event_log,
     get_trace,
+    list_tool_schemas,
     list_tools,
 )
-from trainguard.llm_gemini import decide_with_gemini, gemini_enabled
+from trainguard.llm_gemini import (
+    decide_with_gemini,
+    gemini_enabled,
+    gemini_mcp_agent_enabled,
+    run_gemini_mcp_agent,
+)
 
 DASHBOARD_HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")
 
@@ -158,17 +164,54 @@ async def execute(body: ActionBody) -> dict[str, Any]:
 
 @app.post("/analyze-and-apply")
 async def analyze_and_apply() -> dict[str, Any]:
-    """n8n path: gather context via MCP, decide with Gemini (or heuristic), apply via MCP."""
+    """n8n path: Gemini calls MCP tools (or legacy/heuristic fallback)."""
     status_data = await call_tool("get_training_status")
     if not status_data.get("metrics"):
         await call_tool("start_training", {"max_epochs": 12, "lr": 0.01})
         await call_tool("advance_epochs", {"n": 2})
         status_data = await call_tool("get_training_status")
 
-    metrics = await call_tool("get_latest_metrics", {"limit": 5})
-    checkpoints = await call_tool("list_checkpoints")
+    # Default: Gemini is an MCP client (function calling → call_tool).
+    if gemini_enabled() and gemini_mcp_agent_enabled():
+        agent = await run_gemini_mcp_agent(
+            call_tool=call_tool,
+            list_tool_schemas=list_tool_schemas,
+        )
+        decision = agent["decision"]
+        state = agent.get("state") or await call_tool("get_training_status")
+        data = {
+            "decision": {
+                "run_id": state.get("run_id") or status_data.get("run_id"),
+                "action": decision["action"],
+                "confidence": decision["confidence"],
+                "reason": decision["reason"],
+                "evidence": decision["evidence"],
+                "status": state.get("status"),
+                "fault": state.get("fault"),
+                "decided_by": decision.get("decided_by"),
+                "model": decision.get("model"),
+                "llm_uses_mcp": True,
+                "gemini_requested_mcp_tools": decision.get(
+                    "gemini_requested_mcp_tools", []
+                ),
+            },
+            "applied": bool(agent.get("applied")),
+            "gemini_mcp_rounds": agent.get("gemini_mcp_rounds", 0),
+            "state": {
+                "run_id": state.get("run_id"),
+                "status": state.get("status"),
+                "epoch": state.get("epoch"),
+                "lr": state.get("lr"),
+                "fault": state.get("fault"),
+                "last_action": state.get("last_action"),
+            },
+        }
+        return _with_mcp_meta(data, "gemini_mcp_agent")
 
+    # Legacy: bridge prefetches MCP context; Gemini only returns JSON; bridge applies.
     if gemini_enabled():
+        metrics = await call_tool("get_latest_metrics", {"limit": 5})
+        checkpoints = await call_tool("list_checkpoints")
         decision = decide_with_gemini(
             {
                 "status": status_data,
@@ -200,6 +243,7 @@ async def analyze_and_apply() -> dict[str, Any]:
                 "fault": status_data.get("fault"),
                 "decided_by": decision.get("decided_by"),
                 "model": decision.get("model"),
+                "llm_uses_mcp": False,
             },
             "applied": applied,
             "state": {
@@ -216,6 +260,7 @@ async def analyze_and_apply() -> dict[str, Any]:
     data = await call_tool("analyze_and_apply_recovery")
     if isinstance(data, dict) and "decision" in data:
         data["decision"]["decided_by"] = "heuristic"
+        data["decision"]["llm_uses_mcp"] = False
     return _with_mcp_meta(data, "analyze_and_apply_recovery")
 
 

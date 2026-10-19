@@ -86,3 +86,26 @@ async def list_tools() -> list[str]:
     async with Client(mcp) as client:
         tools = await client.list_tools()
         return [t.name for t in tools]
+
+
+async def list_tool_schemas() -> list[dict[str, Any]]:
+    """Return MCP tool name/description/input schema for LLM function calling."""
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
+        out: list[dict[str, Any]] = []
+        for t in tools:
+            schema = getattr(t, "input_schema", None)
+            if schema is None:
+                schema = getattr(t, "inputSchema", None)
+            if hasattr(schema, "model_dump"):
+                schema = schema.model_dump(by_alias=True, exclude_none=True)
+            elif not isinstance(schema, dict):
+                schema = {"type": "object", "properties": {}}
+            out.append(
+                {
+                    "name": t.name,
+                    "description": t.description or t.name,
+                    "input_schema": schema,
+                }
+            )
+        return out
