@@ -360,14 +360,6 @@ El dashboard muestra en vivo cada tool MCP invocada desde n8n (`start_training`,
 - Informe de incidente PDF/Markdown por run.
 - Multi-run en el dashboard.
 
-
-
-### Despliegue / académico
-
-- Docker Compose para bridge + MCP; túnel estable (Cloudflare) en lugar de ngrok free.
-- Comparar con checkpointing clásico midiendo tiempo perdido con/sin recuperación.
-- Tabla falla inyectada vs acción vs éxito (cobertura).
-
 ---
 
 
