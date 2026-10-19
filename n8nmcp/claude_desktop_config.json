@@ -1,13 +1,13 @@
 {
   "mcpServers": {
     "trainguard": {
-      "command": "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\mcp-arquitecturas\\.venv\\Scripts\\python.exe",
+      "command": "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\n8nmcp\\.venv\\Scripts\\python.exe",
       "args": [
-        "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\mcp-arquitecturas\\run_mcp.py"
+        "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\n8nmcp\\run_mcp.py"
       ],
-      "cwd": "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\mcp-arquitecturas",
+      "cwd": "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\n8nmcp",
       "env": {
-        "PYTHONPATH": "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\mcp-arquitecturas",
+        "PYTHONPATH": "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\n8nmcp",
         "PYTHONUNBUFFERED": "1"
       }
     }

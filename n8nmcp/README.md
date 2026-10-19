@@ -25,7 +25,7 @@ En este proyecto el servidor MCP es `trainguard/mcp_server.py` (entrada para Cla
 | ----------- | ---------------------------------------------------------- |
 | MCP server  | Caja de tools (`mcp_server.py`)                            |
 | Tool        | Acción real (inyectar falla, listar checkpoints, rollback) |
-| Cliente MCP | Claude Desktop **o** el bridge usado por n8n               |
+| Cliente MCP | Claude Desktop, Gemini (function calling) o el bridge      |
 | Gemini      | Cliente MCP vía function calling (decide y aplica)         |
 | n8n         | Orquesta el flujo y dispara el bridge                      |
 
@@ -66,9 +66,9 @@ Un entrenamiento puede “seguir corriendo” pero estar roto: loss en NaN, lear
 ### Qué estrategia de tolerancia se aplica
 
 1. **Checkpointing** — se guardan checkpoints sanos por época.
-2. **Detección** — se leen métricas recientes (tools MCP).
-3. **Decisión** — Gemini (o heurística si no hay API key) propone una acción con `confidence`.
-4. **Recuperación con umbral** — si `confidence >= 0.75`, se aplica (rollback / bajar LR); si no, solo alerta.
+2. **Detección** — Gemini (o el bridge) lee métricas recientes con tools MCP.
+3. **Decisión** — Gemini elige una acción con `confidence` (si no hay API key, heurística local).
+4. **Recuperación** — Gemini llama `apply_recovery_action` vía MCP cuando confía; si no, `alert_only`.
 5. **Trazabilidad** — evidencia + feed en el dashboard MCP.
 
 ---
@@ -94,11 +94,11 @@ n8n ──HTTP──► ngrok ──► bridge ──(MCP Client)─────
 | `trainguard/engine.py`             | Simulación de entrenamiento, fallas y recuperación   |
 | `trainguard/mcp_server.py`         | Servidor MCP (tools)                                 |
 | `run_mcp.py`                       | Entrada limpia para Claude Desktop                   |
-| `trainguard/bridge/app.py`         | Bridge HTTP: n8n → MCP (+ Gemini en analyze)         |
-| `trainguard/llm_gemini.py`         | Cliente Gemini para decidir la acción                |
+| `trainguard/bridge/app.py`         | Bridge HTTP: n8n → MCP (+ agente Gemini)             |
+| `trainguard/llm_gemini.py`         | Gemini con function calling sobre tools MCP          |
 | `trainguard/bridge/dashboard.html` | Monitor en vivo de llamadas MCP                      |
 | `n8n/trainguard-workflow.json`     | Workflow importable en n8n                           |
-| `.env`                             | `GEMINI_API_KEY` / `GEMINI_MODEL` (no se sube a git) |
+| `.env`                             | `GEMINI_*` / `USE_GEMINI` / `GEMINI_MCP_AGENT`       |
 | `runs/current_run.json`            | Estado del run actual                                |
 
 
@@ -115,7 +115,7 @@ n8n Cloud no habla MCP stdio; el **bridge** traduce HTTP a **llamadas MCP**. Con
 ### 1. Dependencias
 
 ```powershell
-cd mcp-arquitecturas
+cd n8nmcp
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
@@ -305,7 +305,7 @@ El dashboard muestra en vivo cada tool MCP invocada desde n8n (`start_training`,
 | `Imagenes/bridge_uvicorn.png`     | Bridge escuchando en `:8787`       |
 | `Imagenes/ngrok_tunnel.png`       | Túnel ngrok al bridge              |
 | `Imagenes/n8n_workflow.png`       | Workflow n8n ejecutado OK          |
-| `Imagenes/consola_n8n_gemini.png` | Respuesta con `decided_by: gemini` |
+| `Imagenes/consola_n8n_gemini.png` | Respuesta con `decided_by: gemini_mcp` |
 | `Imagenes/dashboard_mcp.png`      | Feed visual de tools MCP           |
 | `Imagenes/claude_mcp_tools.png`   | Claude Desktop usando MCP          |
 
