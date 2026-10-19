@@ -1,0 +1,121 @@
+{
+  "mcpServers": {
+    "trainguard": {
+      "command": "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\mcp-arquitecturas\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\mcp-arquitecturas\\run_mcp.py"
+      ],
+      "cwd": "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\mcp-arquitecturas",
+      "env": {
+        "PYTHONPATH": "C:\\Users\\brizi\\Desktop\\ComputacionToleranteaFallas2026B\\mcp-arquitecturas",
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  },
+  "coworkUserFilesPath": "C:\\Users\\brizi\\Claude",
+  "preferences": {
+    "coworkBrowserToolsEnabled": false,
+    "coworkPreferredBrowser": "built_in",
+    "launchPreviewPersistedWorkspaces": [],
+    "launchPreviewSessionScopedSessions": [],
+    "coworkLegacyRootGrantsPruned": true,
+    "coworkScheduledTasksEnabled": false,
+    "coworkHipaaRestricted": false,
+    "orgWorkAcrossAppsDisabled": true,
+    "ccdScheduledTasksEnabled": false,
+    "windowsAppJobLatched": true,
+    "httpCacheZstdLatched": true,
+    "userDataOutsidePackageAnswer": false,
+    "bypassPermissionsGateByAccount": {
+      "74f90281-464c-4df3-a123-044f2fe4015b": false
+    },
+    "coworkWebSearchEnabled": true,
+    "coworkModelAutoFallbackByAccount": {
+      "74f90281-464c-4df3-a123-044f2fe4015b": true
+    },
+    "remoteToolsDeviceName": "alexandro-pc",
+    "epitaxyPrefs": {
+      "desktop-frame.paneStore.v1": {
+        "state": {
+          "extraPanesByMode": {},
+          "colWeightsByMode": {},
+          "rowSplit": 0.5,
+          "draftNonce": 0,
+          "lastPrimaryCodeSession": null
+        },
+        "version": 4
+      },
+      "starred-local-code-sessions": [],
+      "starred-cowork-spaces": [],
+      "starred-session-groups": [],
+      "starred-local-routines": [],
+      "dframe-group-scopes": {},
+      "dframe-local-slice": {
+        "pinnedOrder": [],
+        "homeProjectsPinnedOrder": []
+      },
+      "dframe-code-sections": {
+        "74f90281-464c-4df3-a123-044f2fe4015b/5dd18c83-54f7-4078-b69c-78b3e67d8ec2": {
+          "sections": [
+            {
+              "id": "pinned",
+              "kind": "pinned",
+              "v": 2,
+              "name": "",
+              "order": 0,
+              "sortBy": "recency",
+              "ascending": false,
+              "show": {
+                "metadata": false,
+                "emptyGroups": false,
+                "sideChats": false
+              },
+              "collapsed": false,
+              "shown": true
+            },
+            {
+              "id": "routines",
+              "kind": "routines",
+              "v": 2,
+              "name": "",
+              "order": 1,
+              "sortBy": "recency",
+              "ascending": false,
+              "show": {
+                "metadata": false,
+                "emptyGroups": false,
+                "sideChats": false
+              },
+              "collapsed": true,
+              "shown": false
+            },
+            {
+              "id": "sessions",
+              "kind": "sessions",
+              "v": 2,
+              "name": "",
+              "order": 2,
+              "sortBy": "recency",
+              "ascending": false,
+              "show": {
+                "metadata": false,
+                "emptyGroups": false,
+                "sideChats": false
+              },
+              "collapsed": false,
+              "shown": true
+            }
+          ],
+          "migratedFrom": 1,
+          "prefsSeeded": true
+        }
+      },
+      "ccd-sessions-filter": {
+        "state": {
+          "selectedProjects": []
+        },
+        "version": 0
+      }
+    }
+  }
+}

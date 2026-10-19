@@ -1,0 +1,373 @@
+{
+  "name": "TrainGuard — NN Fault Recovery",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trainguard",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Webhook TrainGuard",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "webhookId": "trainguard-demo"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst mode = body.mode || 'demo';\nconst kind = body.kind || 'nan_loss';\nconst bridge = body.bridge_base_url || 'https://REPLACE_WITH_NGROK.ngrok-free.app';\n\nreturn [{\n  json: {\n    mode,\n    kind,\n    bridge_base_url: bridge.replace(/\\/$/, ''),\n    requested_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "demo",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cond-demo"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "demo"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "analyze",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cond-analyze"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "analyze"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "inject",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cond-inject"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "inject"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "name": "Route by Mode",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/start",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"max_epochs\": 12, \"lr\": 0.01 }",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "d4e5f6a7-b8c9-0123-def0-234567890123",
+      "name": "Start Training",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, -160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/inject-fault",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"kind\": \"{{ $('Normalize Input').item.json.kind }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e5f6a7b8-c9d0-1234-ef01-345678901234",
+      "name": "Inject Fault",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [980, -160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/analyze-and-apply",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "f6a7b8c9-d0e1-2345-f012-456789012345",
+      "name": "Analyze and Apply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/inject-fault",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"kind\": \"{{ $('Normalize Input').item.json.kind }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "a7b8c9d0-e1f2-3456-0123-567890123456",
+      "name": "Inject Fault Only",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/status",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "b8c9d0e1-f2a3-4567-1234-678901234567",
+      "name": "Get Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const analyzed = $('Analyze and Apply').item.json;\nconst status = $json;\nconst decision = analyzed.decision || analyzed;\nconst mcpFromAnalyze = analyzed.mcp_tools_called || analyzed._meta?.mcp_tools_called || [];\nconst mcpFromStatus = status.mcp_tools_called || status._meta?.mcp_tools_called || [];\nconst tools = [...mcpFromAnalyze, ...mcpFromStatus].map(t => t.tool);\nconst uniqueTools = [...new Set(tools)];\nconst story = analyzed.mcp_story || `n8n → bridge → ${uniqueTools.map(t => 'MCP:' + t).join(' → ')}`;\n\nconst banner = [\n  '╔══════════════════════════════════════════╗',\n  '║     TRAINGUARD · LLAMADA VÍA MCP          ║',\n  '╠══════════════════════════════════════════╣',\n  `║ tools: ${uniqueTools.join(', ') || 'n/a'}`.padEnd(43, ' ') + '║',\n  `║ action: ${decision.action}`.padEnd(43, ' ') + '║',\n  '║ dashboard: http://127.0.0.1:8787/dashboard ║',\n  '╚══════════════════════════════════════════╝'\n].join('\\n');\n\nconst summary = {\n  project: 'TrainGuard',\n  mode: $('Normalize Input').item.json.mode,\n  called_via_mcp: true,\n  decided_by: decision.decided_by || analyzed.decision?.decided_by || 'unknown',\n  model: decision.model || analyzed.decision?.model || null,\n  mcp_banner: banner,\n  mcp_story: story,\n  mcp_dashboard: 'http://127.0.0.1:8787/dashboard',\n  mcp_integration: 'n8n -> bridge -> MCP Client -> TrainGuard tools (+ Gemini si USE_GEMINI)',\n  mcp_tools_from_analyze: mcpFromAnalyze,\n  mcp_tools_from_status: mcpFromStatus,\n  action: decision.action,\n  confidence: decision.confidence,\n  reason: decision.reason,\n  evidence: decision.evidence,\n  applied: analyzed.applied,\n  run_id: status.run_id || decision.run_id,\n  status: status.status,\n  epoch: status.epoch,\n  lr: status.lr,\n  fault: status.fault,\n  last_action: status.last_action,\n  message: `TrainGuard via ${decision.decided_by || 'MCP'}: ${decision.action} (conf=${decision.confidence}) — ${decision.reason}`\n};\n\nreturn [{ json: summary }];"
+      },
+      "id": "c9d0e1f2-a3b4-5678-2345-789012345678",
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "d0e1f2a3-b4c5-6789-3456-890123456789",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1940, 0]
+    },
+    {
+      "parameters": {
+        "content": "## TrainGuard\n1. Arranca el bridge local: `python -m trainguard.bridge.app`\n2. Expón con ngrok: `ngrok http 8787`\n3. En el body del webhook puedes enviar:\n```json\n{\n  \"mode\": \"demo\",\n  \"kind\": \"nan_loss\",\n  \"bridge_base_url\": \"https://TU-URL.ngrok-free.app\"\n}\n```\nModes: `demo` | `analyze` | `inject`\nFaults: `nan_loss` | `exploding_lr` | `stall`",
+        "height": 380,
+        "width": 420
+      },
+      "id": "e1f2a3b4-c5d6-7890-4567-901234567890",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-420, -120]
+    }
+  ],
+  "connections": {
+    "Webhook TrainGuard": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Route by Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Mode": {
+      "main": [
+        [
+          {
+            "node": "Start Training",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analyze and Apply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Inject Fault Only",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analyze and Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Training": {
+      "main": [
+        [
+          {
+            "node": "Inject Fault",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inject Fault": {
+      "main": [
+        [
+          {
+            "node": "Analyze and Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inject Fault Only": {
+      "main": [
+        [
+          {
+            "node": "Analyze and Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze and Apply": {
+      "main": [
+        [
+          {
+            "node": "Get Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Status": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Summary": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "TrainGuard"
+    },
+    {
+      "name": "MCP"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

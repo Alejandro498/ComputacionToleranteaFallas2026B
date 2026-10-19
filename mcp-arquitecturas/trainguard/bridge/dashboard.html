@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TrainGuard · MCP Live</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b1210;
+      --panel: #122019;
+      --line: #24362c;
+      --text: #e8f2ea;
+      --muted: #8aa394;
+      --accent: #3dff9a;
+      --warn: #ffc857;
+      --bad: #ff5d6c;
+      --chip: #1a2e24;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--text);
+      background:
+        radial-gradient(900px 500px at 10% -10%, #163325 0%, transparent 55%),
+        radial-gradient(700px 400px at 100% 0%, #1c2a18 0%, transparent 50%),
+        var(--bg);
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px 20px 48px; }
+    header {
+      display: flex; flex-wrap: wrap; gap: 16px;
+      align-items: end; justify-content: space-between;
+      margin-bottom: 28px;
+    }
+    h1 {
+      font-family: Syne, sans-serif;
+      font-weight: 800;
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      letter-spacing: -0.03em;
+      margin: 0 0 6px;
+      line-height: 1;
+    }
+    .sub { color: var(--muted); font-size: 0.9rem; max-width: 42ch; }
+    .pulse {
+      display: inline-flex; align-items: center; gap: 8px;
+      border: 1px solid var(--line); background: var(--panel);
+      padding: 10px 14px; border-radius: 999px; font-size: 0.8rem;
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
+      box-shadow: 0 0 0 0 rgba(61, 255, 154, 0.7);
+      animation: ping 1.6s infinite;
+    }
+    @keyframes ping {
+      0% { box-shadow: 0 0 0 0 rgba(61,255,154,.55); }
+      70% { box-shadow: 0 0 0 12px rgba(61,255,154,0); }
+      100% { box-shadow: 0 0 0 0 rgba(61,255,154,0); }
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+    .stat {
+      background: linear-gradient(180deg, #15261d, var(--panel));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .stat .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
+    .stat .value { font-family: Syne, sans-serif; font-size: 1.8rem; font-weight: 700; margin-top: 8px; }
+    .flow {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      margin: 0 0 22px; padding: 14px; border: 1px dashed var(--line); border-radius: 14px;
+      color: var(--muted); font-size: 0.82rem;
+    }
+    .flow b { color: var(--accent); font-weight: 600; }
+    .arrow { opacity: 0.5; }
+    .feed {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(10, 18, 14, 0.7);
+      backdrop-filter: blur(6px);
+    }
+    .feed-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 16px; border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      font-family: Syne, sans-serif; font-weight: 700;
+    }
+    .btn {
+      border: 1px solid var(--line); background: var(--chip); color: var(--text);
+      border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.75rem; cursor: pointer;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .event {
+      display: grid;
+      grid-template-columns: 78px 1fr auto;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      animation: slideIn 0.35s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: none; }
+    }
+    .event:last-child { border-bottom: 0; }
+    .time { color: var(--muted); font-size: 0.8rem; padding-top: 4px; }
+    .tool {
+      font-family: Syne, sans-serif; font-weight: 700; font-size: 1.05rem;
+      color: var(--accent);
+    }
+    .meta { color: var(--muted); font-size: 0.78rem; margin-top: 4px; }
+    .badge {
+      align-self: start;
+      padding: 4px 10px; border-radius: 999px;
+      background: var(--chip); border: 1px solid var(--line);
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .badge.ok { color: var(--accent); border-color: rgba(61,255,154,.35); }
+    .badge.fail { color: var(--bad); border-color: rgba(255,93,108,.4); }
+    .empty { padding: 36px 16px; text-align: center; color: var(--muted); }
+    code { color: var(--warn); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>TrainGuard MCP</h1>
+        <p class="sub">Monitor en vivo: cada llamada de n8n al bridge aparece aquí como tool MCP.</p>
+      </div>
+      <div class="pulse"><span class="dot"></span> LIVE · auto-refresh 1.5s</div>
+    </header>
+
+    <div class="flow">
+      <b>n8n</b> <span class="arrow">→</span>
+      <b>Bridge HTTP</b> <span class="arrow">→</span>
+      <b>MCP Client</b> <span class="arrow">→</span>
+      <b>TrainGuard tools</b>
+    </div>
+
+    <div class="grid">
+      <div class="stat"><div class="label">MCP calls</div><div class="value" id="count">0</div></div>
+      <div class="stat"><div class="label">Última tool</div><div class="value" id="last" style="font-size:1.1rem">—</div></div>
+      <div class="stat"><div class="label">Estado</div><div class="value" id="state" style="font-size:1.1rem;color:var(--accent)">waiting</div></div>
+    </div>
+
+    <section class="feed">
+      <div class="feed-head">
+        <span>MCP tool feed</span>
+        <button class="btn" id="clear">Clear</button>
+      </div>
+      <div id="events"><div class="empty">Esperando llamadas… dispara el webhook de n8n.</div></div>
+    </section>
+  </div>
+
+  <script>
+    const eventsEl = document.getElementById("events");
+    const countEl = document.getElementById("count");
+    const lastEl = document.getElementById("last");
+    const stateEl = document.getElementById("state");
+    let seen = new Set();
+
+    function render(events) {
+      countEl.textContent = String(events.length);
+      if (!events.length) {
+        eventsEl.innerHTML = '<div class="empty">Esperando llamadas… dispara el webhook de n8n.</div>';
+        lastEl.textContent = "—";
+        stateEl.textContent = "waiting";
+        return;
+      }
+      lastEl.textContent = events[0].tool;
+      stateEl.textContent = events[0].ok ? "MCP OK" : "MCP FAIL";
+      stateEl.style.color = events[0].ok ? "var(--accent)" : "var(--bad)";
+      eventsEl.innerHTML = events.map((e) => {
+        const args = e.arguments && Object.keys(e.arguments).length
+          ? JSON.stringify(e.arguments)
+          : "{}";
+        return `
+          <article class="event">
+            <div class="time">${e.ts}<br/>${e.elapsed_ms || 0}ms</div>
+            <div>
+              <div class="tool">${e.tool}</div>
+              <div class="meta">protocol=<code>MCP</code> · source=<code>${e.source || "?"}</code> · args=${args}</div>
+            </div>
+            <div class="badge ${e.ok ? "ok" : "fail"}">${e.ok ? "OK" : "FAIL"}</div>
+          </article>`;
+      }).join("");
+    }
+
+    async function tick() {
+      try {
+        const res = await fetch("/mcp-events");
+        const data = await res.json();
+        render(data.events || []);
+      } catch (err) {
+        stateEl.textContent = "offline";
+        stateEl.style.color = "var(--bad)";
+      }
+    }
+
+    document.getElementById("clear").addEventListener("click", async () => {
+      await fetch("/mcp-events/clear", { method: "POST" });
+      seen.clear();
+      tick();
+    });
+
+    tick();
+    setInterval(tick, 1500);
+  </script>
+</body>
+</html>
