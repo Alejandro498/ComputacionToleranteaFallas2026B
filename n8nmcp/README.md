@@ -51,7 +51,6 @@ n8n solo, con nodos HTTP, podría pegarle a una API, pero cada cambio de trainer
 3. **El bridge es el adaptador.** n8n Cloud habla HTTP; el servidor MCP habla tools. Cada nodo HTTP Request es una tool. Por eso en el dashboard cada fila dice `n8n · Inject Fault → MCP · inject_fault`.
 4. **Gemini es un cliente MCP dentro de un nodo.** En **Analyze and Apply** no inventa el loss: pide `get_latest_metrics` y `list_checkpoints`, y si confía llama `apply_recovery_action`. n8n no elige el rollback; el modelo lo elige con evidencia.
 
-Lo útil para la clase: n8n demuestra la automatización (el flujo se ve y se dispara con un botón) y MCP demuestra que la recuperación es una acción real sobre pesos y checkpoints, no un mensaje en un JSON.
 
 ---
 
