@@ -10,17 +10,21 @@ Tres piezas:
 
 ---
 
+
+
 ## ¿Qué es MCP?
 
 MCP expone funciones reales. El prompt indica qué hacer; la tool lo ejecuta.
 
-| Concepto | En TrainGuard |
-| --- | --- |
-| MCP server | `trainguard/mcp_server.py` |
-| Tool | Acción real (entrenar una época, listar `.pt`, rollback) |
-| Cliente | El bridge (n8n → HTTP) y Gemini (function calling) |
-| n8n | Orquesta el orden de las llamadas |
-| Dashboard | Dispara el webhook y muestra el proceso en vivo |
+
+| Concepto   | En TrainGuard                                            |
+| ---------- | -------------------------------------------------------- |
+| MCP server | `trainguard/mcp_server.py`                               |
+| Tool       | Acción real (entrenar una época, listar `.pt`, rollback) |
+| Cliente    | El bridge (n8n → HTTP) y Gemini (function calling)       |
+| n8n        | Orquesta el orden de las llamadas                        |
+| Dashboard  | Dispara el webhook y muestra el proceso en vivo          |
+
 
 n8n Cloud no habla MCP stdio. El bridge (`python -m trainguard.bridge.app`, puerto 8787) recibe HTTP y llama las tools. Con `USE_GEMINI=true` y `GEMINI_MCP_AGENT=true` (default), Gemini elige y ejecuta las tools de lectura y `apply_recovery_action`. Sin key, decide la heurística. Con `GEMINI_MCP_AGENT=false`, Gemini solo devuelve JSON y el bridge aplica la acción.
 
@@ -28,11 +32,13 @@ n8n Cloud no habla MCP stdio. El bridge (`python -m trainguard.bridge.app`, puer
 
 Cada uno resuelve una mitad distinta del problema. Juntos arman el experimento.
 
-| | n8n | MCP |
-| --- | --- | --- |
-| Pregunta que responde | ¿Cuándo y en qué orden? | ¿Qué se puede hacer de verdad? |
-| En la demo | Webhook, dataset, falla, épocas sanas, época rota, resume, compare | `start_training`, `advance_epochs`, `inject_fault`, `apply_recovery_action` |
-| Lo que no hace | No entrena ni carga un `.pt` | No decide el guion ni se dispara solo |
+
+|                       | n8n                                                                | MCP                                                                         |
+| --------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| Pregunta que responde | ¿Cuándo y en qué orden?                                            | ¿Qué se puede hacer de verdad?                                              |
+| En la demo            | Webhook, dataset, falla, épocas sanas, época rota, resume, compare | `start_training`, `advance_epochs`, `inject_fault`, `apply_recovery_action` |
+| Lo que no hace        | No entrena ni carga un `.pt`                                       | No decide el guion ni se dispara solo                                       |
+
 
 n8n solo, con nodos HTTP, podría pegarle a una API, pero cada cambio de trainer obligaría a reescribir URLs y cuerpos. MCP solo deja las tools listas, pero alguien tiene que llamarlas a mano y en orden. La combinación es esta:
 
@@ -45,21 +51,37 @@ Lo útil para la clase: n8n demuestra la automatización (el flujo se ve y se di
 
 ---
 
+
+
 ## El escenario
 
 Un entrenamiento puede seguir “corriendo” y estar roto: loss en NaN, LR demasiado alto o métricas estancadas. Sin un watchdog se pierde tiempo y, a veces, el mejor checkpoint.
 
 TrainGuard lo demuestra con un run real (TinyCNN), no con una curva inventada. El dataset no está fijo: n8n lo resuelve y MCP arranca el trainer correcto.
 
+### Cómo funciona el entrenamiento
+
+Cada **Iniciar** (o un webhook con `mode: demo`) abre un entrenamiento nuevo. `start_training` genera un `run_id` (`run-` y ocho caracteres), una carpeta `runs/<run_id>/` y una red con pesos nuevos. Todos los nodos de esa ejecución trabajan sobre ese mismo modelo: las épocas sanas, la falla, el rollback y el resume. El rollback carga el `best.pt` de esa carpeta y sigue; no abre otro entrenamiento.
+
+El siguiente Iniciar no continúa el anterior. En memoria y en `runs/current_run.json` solo hay un run activo. Las carpetas viejas se quedan en `runs/`, con sus `.pt`, y el engine ya no las entrena.
+
+La receta es la misma en todos los demos: TinyCNN en CPU, SGD con learning rate 0.01, semilla 42, unas 2 000 imágenes de train y 1 000 de validación, lote de 64 y tope de 6 épocas. La semilla hace que dos demos del mismo dataset arranquen parecido; cada uno tiene sus propios checkpoints.
+
+Lo que cambia de un demo a otro es el dataset (MNIST, Fashion-MNIST, CIFAR-10 o una carpeta propia). TinyCNN se adapta a canales, tamaño de imagen y número de clases. Los pesos de un dataset no se reutilizan en otro.
+
+`analyze` e `inject` no pasan por **Start Training**: actúan sobre el run que ya está en `current_run.json`.
+
 ### Fallas
 
 La falla se **arma** a propósito (`inject_fault`). El síntoma sale del loop de PyTorch, no de un JSON inventado.
 
-| Falla (`kind`) | Cómo se provoca | Acción típica |
-| --- | --- | --- |
-| `nan_loss` | El loss del batch se multiplica por NaN y los pesos dejan de ser finitos | `rollback_checkpoint` |
-| `exploding_lr` | El optimizer pasa a LR = 5.0 y sigue entrenando | `reduce_lr_and_resume` |
-| `stall` | LR ≈ 0 y el 90 % de las labels se aleatorizan | reducir LR o alertar |
+
+| Falla (`kind`) | Cómo se provoca                                                          | Acción típica          |
+| -------------- | ------------------------------------------------------------------------ | ---------------------- |
+| `nan_loss`     | El loss del batch se multiplica por NaN y los pesos dejan de ser finitos | `rollback_checkpoint`  |
+| `exploding_lr` | El optimizer pasa a LR = 5.0 y sigue entrenando                          | `reduce_lr_and_resume` |
+| `stall`        | LR ≈ 0 y el 90 % de las labels se aleatorizan                            | reducir LR o alertar   |
+
 
 Si se pide bajar el LR y los pesos ya son NaN, el engine escala solo a rollback.
 
@@ -71,13 +93,15 @@ Si se pide bajar el LR y los pesos ya son NaN, el engine escala solo a rollback.
 4. **Recuperación.** `rollback_checkpoint` hace `torch.load(best.pt)` y **no pisa** ese archivo. `reduce_lr_and_resume` baja el LR del optimizer.
 5. **Resume.** n8n pide más épocas desde los pesos recuperados.
 6. **Medición.** `compare_recovery` contrasta el best de antes vs el de después:
-   - `preserved_best` — `best_acc_after >= best_acc_before`
-   - `resumed` + `latest_healthy` — el run sigue y la última época no es NaN
-   - `recovery_success` — las dos cosas
+  - `preserved_best` — `best_acc_after >= best_acc_before`
+  - `resumed` + `latest_healthy` — el run sigue y la última época no es NaN
+  - `recovery_success` — las dos cosas
 
 En el dashboard, la fila de época **repetida** (por ejemplo un segundo “epoch 2” con la misma accuracy) es el rollback: no entrena, reevalúa `best.pt` y deja una métrica `restored_from_checkpoint`. Después vienen las épocas nuevas, ya sanas. Si esas superan el récord, el `sha256` de `best.pt` cambia **después** del rollback, porque el archivo se actualizó al mejorar, no porque el rollback lo haya pisado.
 
 ---
+
+
 
 ## Cómo está armado
 
@@ -91,23 +115,29 @@ Dashboard (Iniciar) ──webhook──► n8n
                                            └── MCP Client ──► engine ──► trainer (TinyCNN + .pt)
 ```
 
-| Pieza | Rol |
-| --- | --- |
-| `trainguard/datasets.py` | Catálogo: MNIST, Fashion-MNIST, CIFAR-10, ImageFolder, ZIP por URL |
-| `trainguard/trainer.py` | TinyCNN adaptable + lectura/escritura de `.pt` |
-| `trainguard/engine.py` | Loop, fallas controladas, rollback y `compare_recovery` |
-| `trainguard/mcp_server.py` | Servidor MCP (tools) |
-| `trainguard/bridge/app.py` | HTTP: n8n y dashboard → MCP |
-| `trainguard/llm_gemini.py` | Gemini con function calling sobre tools MCP |
-| `trainguard/bridge/dashboard.html` | Botón Iniciar, métricas, recovery y feed MCP |
-| `n8n/trainguard-workflow.json` | Workflow importable |
-| `.env` | `GEMINI_*`, `N8N_WEBHOOK_URL`, `BRIDGE_PUBLIC_URL` |
-| `runs/<run_id>/*.pt` | `last.pt`, `best.pt`, `epoch_XXX.pt` |
-| `data/` | Datasets torchvision y carpetas custom (gitignore) |
+
+| Pieza                              | Rol                                                                |
+| ---------------------------------- | ------------------------------------------------------------------ |
+| `trainguard/datasets.py`           | Catálogo: MNIST, Fashion-MNIST, CIFAR-10, ImageFolder, ZIP por URL |
+| `trainguard/trainer.py`            | TinyCNN adaptable + lectura/escritura de `.pt`                     |
+| `trainguard/engine.py`             | Loop, fallas controladas, rollback y `compare_recovery`            |
+| `trainguard/mcp_server.py`         | Servidor MCP (tools)                                               |
+| `trainguard/bridge/app.py`         | HTTP: n8n y dashboard → MCP                                        |
+| `trainguard/llm_gemini.py`         | Gemini con function calling sobre tools MCP                        |
+| `trainguard/bridge/dashboard.html` | Botón Iniciar, métricas, recovery y feed MCP                       |
+| `n8n/trainguard-workflow.json`     | Workflow importable                                                |
+| `.env`                             | `GEMINI_*`, `N8N_WEBHOOK_URL`, `BRIDGE_PUBLIC_URL`                 |
+| `runs/<run_id>/*.pt`               | `last.pt`, `best.pt`, `epoch_XXX.pt`                               |
+| `data/`                            | Datasets torchvision y carpetas custom (gitignore)                 |
+
 
 ---
 
+
+
 ## Cómo ejecutarlo
+
+
 
 ### 1. Dependencias
 
@@ -116,6 +146,8 @@ cd n8nmcp
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
+
+
 
 ### 2. Variables
 
@@ -142,6 +174,8 @@ No pegues la API key en el README ni en chats. Si se filtró, revócala.
 2. Gemini llama `get_training_status`, `get_latest_metrics` y `list_checkpoints`.
 3. Si confía, llama `apply_recovery_action`.
 4. La respuesta trae `decided_by: gemini_mcp`.
+
+
 
 ### 3. Bridge y túnel
 
@@ -203,42 +237,54 @@ Con `dataset: "auto"` n8n usa la primera carpeta de `data/custom/`. También val
 
 ---
 
+
+
 ## Nodos del workflow
 
 ![Workflow n8n: camino demo arriba e inject abajo](Imagenes/n8n_workflow.png)
 
-El canvas tiene dos caminos que se juntan en **Get Metrics**. El de arriba es `demo` (el del botón Iniciar): arranca el run, entrena sano, guarda el snapshot, inyecta la falla y entrena la época rota. El de abajo es `inject`: solo falla y entrena sobre un run que ya existía. `analyze` entra directo a **Analyze and Apply**.
+El botón **Iniciar** siempre manda `mode: demo`. Las otras rutas se disparan con el mismo webhook, cambiando `mode` en el JSON (el ejempas de **Ro**lo de PowerShell de arriba). Las cuatro salid**ute by Mode** comparten el tramo final: **Analyze and Apply → Resume → Compare → Final Status → Build Summary → Respond**. Resume son 2 épocas en todas.
+
+`demo` — experimento completo. Camino de arriba. Crea el run, entrena 2 épocas sanas, guarda el snapshot, arma la falla, entrena 1 época rota y después entra al tramo final. Es el de la captura y el del botón.
+
+`inject` — falla sobre el run que ya existe. Camino de abajo. No llama a Start ni entrena épocas sanas: **Inject Fault Only** arma `kind` y **Train Broken Only** corre 1 época con esa falla. En **Get Metrics** se junta con `demo`. Sirve para romper un entrenamiento que ya dejaste a medias. Si `current_run.json` está idle o no hay trainer, `inject_fault` arranca un run con los defaults (MNIST, sin épocas previas) y le pone la falla encima.
+
+`analyze` — no inyecta otra falla. Entra directo a **Analyze and Apply**: Gemini lee el run activo y aplica rollback o baja el LR si las métricas lo piden. Después sigue el tramo final, incluidas las 2 épocas de Resume, aunque la acción haya sido `alert_only`. Si el run no tiene métricas, el bridge entrena 2 épocas antes de preguntarle a Gemini, para tener algo que leer.
+
+**Cualquier otro** `mode` — el switch no lo reconoce y usa la misma salida que `analyze`.
 
 Camino `demo` (el del botón Iniciar):
 
 `Webhook → Normalize → List Datasets → Resolve Dataset → Route(demo) → Start → Train Healthy → Snapshot → Inject → Train Broken → Metrics → Checkpoints → Analyze and Apply → Resume → Compare → Final Status → Build Summary → Respond`
 
-| Nodo | Qué hace |
-| --- | --- |
-| **Webhook TrainGuard** | Entrada POST (`mode`, `kind`, `dataset`, `bridge_base_url`, …). |
-| **Normalize Input** | Defaults: `mode=demo`, `kind=nan_loss`, `dataset=auto`, 2 épocas sanas, 1 rota, 2 de resume. |
-| **List Datasets** | `GET /datasets` → MCP `list_datasets`. |
-| **Resolve Dataset** | Elige URL, path, la primera carpeta `data/custom/` o MNIST. |
-| **Route by Mode** | `demo` (experimento completo), `analyze` (solo vigilar), `inject` (falla sobre un run ya creado). |
-| **Start Training** | `POST /start` → MCP `start_training`. Solo en `demo`. |
-| **Train Healthy** | `POST /advance` con 2 épocas. Escribe `best.pt`. |
-| **Snapshot Before** | `GET /status`. Guarda `best_acc` y `sha256` antes de la falla. |
-| **Inject Fault** | `POST /inject-fault`. Arma la falla; no entrena. |
-| **Train Broken** | `POST /advance` con 1 época rota (la fila NaN). |
-| **Inject Fault Only** | Igual que Inject, path `inject`, sin Start. |
-| **Train Broken Only** | La época rota de ese path. |
-| **Get Metrics** | `GET /metrics` → MCP `get_latest_metrics`. |
-| **List Checkpoints** | `GET /checkpoints` → paths y `sha256`. |
-| **Analyze and Apply** | Gemini llama tools MCP y aplica rollback o baja el LR. |
-| **Resume Training** | 2 épocas desde los pesos recuperados. |
-| **Compare Recovery** | `GET /compare` → `preserved_best`, `recovery_success`. |
-| **Final Status** | Estado final del run. |
-| **Build Summary** | JSON de respuesta: dataset, acción, evidencia, best antes/después. |
-| **Respond to Webhook** | Devuelve ese JSON al dashboard o a PowerShell. |
 
-`analyze` entra directo en **Analyze and Apply**: mira un run que ya existe y recupera si hace falta, sin inyectar otra falla.
+| Nodo                   | Qué hace                                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| **Webhook TrainGuard** | Entrada POST (`mode`, `kind`, `dataset`, `bridge_base_url`, …).                              |
+| **Normalize Input**    | Defaults: `mode=demo`, `kind=nan_loss`, `dataset=auto`, 2 épocas sanas, 1 rota, 2 de resume. |
+| **List Datasets**      | `GET /datasets` → MCP `list_datasets`.                                                       |
+| **Resolve Dataset**    | Elige URL, path, la primera carpeta `data/custom/` o MNIST.                                  |
+| **Route by Mode**      | Parte en `demo`, `analyze` o `inject`. Un `mode` desconocido cae en `analyze`.               |
+| **Start Training**     | `POST /start` → MCP `start_training`. Solo en `demo`.                                        |
+| **Train Healthy**      | `POST /advance` con 2 épocas. Escribe `best.pt`.                                             |
+| **Snapshot Before**    | `GET /status`. Guarda `best_acc` y `sha256` antes de la falla.                               |
+| **Inject Fault**       | `POST /inject-fault`. Arma la falla; no entrena.                                             |
+| **Train Broken**       | `POST /advance` con 1 época rota (la fila NaN).                                              |
+| **Inject Fault Only**  | Igual que Inject, path `inject`, sin Start.                                                  |
+| **Train Broken Only**  | La época rota de ese path.                                                                   |
+| **Get Metrics**        | `GET /metrics` → MCP `get_latest_metrics`.                                                   |
+| **List Checkpoints**   | `GET /checkpoints` → paths y `sha256`.                                                       |
+| **Analyze and Apply**  | Gemini llama tools MCP y aplica rollback o baja el LR.                                       |
+| **Resume Training**    | 2 épocas desde los pesos recuperados.                                                        |
+| **Compare Recovery**   | `GET /compare` → `preserved_best`, `recovery_success`.                                       |
+| **Final Status**       | Estado final del run.                                                                        |
+| **Build Summary**      | JSON de respuesta: dataset, acción, evidencia, best antes/después.                           |
+| **Respond to Webhook** | Devuelve ese JSON al dashboard o a PowerShell.                                               |
+
 
 ---
+
+
 
 ## Qué se ve en el dashboard
 
@@ -256,23 +302,27 @@ La captura es MNIST con `nan_loss`, ya terminada: el indicador dice **DONE · su
 
 **Tarjetas.**
 
-| Tarjeta | En la captura | Qué es |
-| --- | --- | --- |
-| Dataset | MNIST | El dataset con el que arrancó `start_training`. |
-| Run / época | `run-62c93fe8` · e4 | Id del run y la época en la que quedó. |
-| Best acc | 0.92 | Mejor `val_acc` guardada en `best.pt` después de recuperar. |
-| Falla / acción | `rollback_checkpoint` | Lo que aplicó Gemini por MCP. |
+
+| Tarjeta        | En la captura         | Qué es                                                      |
+| -------------- | --------------------- | ----------------------------------------------------------- |
+| Dataset        | MNIST                 | El dataset con el que arrancó `start_training`.             |
+| Run / época    | `run-62c93fe8` · e4   | Id del run y la época en la que quedó.                      |
+| Best acc       | 0.92                  | Mejor `val_acc` guardada en `best.pt` después de recuperar. |
+| Falla / acción | `rollback_checkpoint` | Lo que aplicó Gemini por MCP.                               |
+
 
 **Accuracy por época.** La altura de la barra es `val_acc`. Verde = época sana, rojo = NaN, ámbar = la fila del rollback (misma accuracy que el `best.pt`, no una época nueva). La tabla de abajo es el mismo dato en números. `ok = sí` significa loss finito y pesos sanos.
 
-| e | val_loss | val_acc | Qué pasó |
-| --- | --- | --- | --- |
-| 1 | 2.15 | 0.301 | Primera época sana. |
-| 2 | 0.84 | 0.699 | Mejor checkpoint hasta ahí. Se escribió `best.pt`. |
-| 3 | NaN | 0 | Falla `nan_loss`. El run se rompió. |
-| 2 | 0.84 | 0.699 | Rollback: no entrena, recarga `best.pt` y lo reevalúa. Por eso la época 2 se repite. |
-| 3 | 0.52 | 0.827 | Resume. La época 3 ahora es sana y supera el best. |
-| 4 | 0.30 | 0.92 | Sigue entrenando. El mejor resultado no se perdió; mejoró. |
+
+| e   | val_loss | val_acc | Qué pasó                                                                             |
+| --- | -------- | ------- | ------------------------------------------------------------------------------------ |
+| 1   | 2.15     | 0.301   | Primera época sana.                                                                  |
+| 2   | 0.84     | 0.699   | Mejor checkpoint hasta ahí. Se escribió `best.pt`.                                   |
+| 3   | NaN      | 0       | Falla `nan_loss`. El run se rompió.                                                  |
+| 2   | 0.84     | 0.699   | Rollback: no entrena, recarga `best.pt` y lo reevalúa. Por eso la época 2 se repite. |
+| 3   | 0.52     | 0.827   | Resume. La época 3 ahora es sana y supera el best.                                   |
+| 4   | 0.30     | 0.92    | Sigue entrenando. El mejor resultado no se perdió; mejoró.                           |
+
 
 **Recuperación.** Sale de `compare_recovery`, cuando n8n llega al nodo Compare. En la captura el título es **Se conservó el mejor** y la flecha es `0.699 → 0.92` (Δ 0.221): la accuracy de `best.pt` antes de la falla y después del resume. `resumed=true` y `sano=true` dicen que el run siguió y que la última época no es NaN.
 
@@ -284,36 +334,46 @@ En `runs/<run_id>/` quedan `best.pt`, `last.pt` y `epoch_XXX.pt`.
 
 ---
 
+
+
 ## Tools MCP
 
-| Tool | Qué hace |
-| --- | --- |
-| `list_datasets` | Builtin + carpetas `data/custom` |
-| `start_training` | Crea el run (auto / torchvision / custom) |
-| `advance_epochs` | Entrena N épocas y persiste `.pt` |
-| `get_training_status` | Estado completo |
-| `get_latest_metrics` | Últimas métricas de validación |
-| `list_checkpoints` | `.pt`, `sha256` y `best.pt` |
-| `inject_fault` | Arma `nan_loss` / `exploding_lr` / `stall` |
-| `analyze_training` | Recomienda una acción (heurística) |
-| `apply_recovery_action` | Carga `best.pt` o baja el LR |
+
+| Tool                         | Qué hace                                                       |
+| ---------------------------- | -------------------------------------------------------------- |
+| `list_datasets`              | Builtin + carpetas `data/custom`                               |
+| `start_training`             | Crea el run (auto / torchvision / custom)                      |
+| `advance_epochs`             | Entrena N épocas y persiste `.pt`                              |
+| `get_training_status`        | Estado completo                                                |
+| `get_latest_metrics`         | Últimas métricas de validación                                 |
+| `list_checkpoints`           | `.pt`, `sha256` y `best.pt`                                    |
+| `inject_fault`               | Arma `nan_loss` / `exploding_lr` / `stall`                     |
+| `analyze_training`           | Recomienda una acción (heurística)                             |
+| `apply_recovery_action`      | Carga `best.pt` o baja el LR                                   |
 | `analyze_and_apply_recovery` | Analiza y aplica si la confianza es alta (fallback sin Gemini) |
-| `compare_recovery` | ¿Se conservó `best_acc`? ¿El run reanudó? |
+| `compare_recovery`           | ¿Se conservó `best_acc`? ¿El run reanudó?                      |
+
 
 ---
+
+
 
 ## Archivos
 
-| Archivo / carpeta | Rol |
-| --- | --- |
-| `trainguard/` | Trainer, engine, MCP, bridge y cliente Gemini |
-| `n8n/trainguard-workflow.json` | Workflow n8n |
-| `.env.example` | Plantilla Gemini, webhook y URL pública del bridge |
-| `requirements.txt` | Dependencias (incluye PyTorch) |
-| `runs/` | Estado JSON + checkpoints `.pt` |
-| `data/` | MNIST / Fashion / CIFAR y `data/custom/` |
+
+| Archivo / carpeta              | Rol                                                |
+| ------------------------------ | -------------------------------------------------- |
+| `trainguard/`                  | Trainer, engine, MCP, bridge y cliente Gemini      |
+| `n8n/trainguard-workflow.json` | Workflow n8n                                       |
+| `.env.example`                 | Plantilla Gemini, webhook y URL pública del bridge |
+| `requirements.txt`             | Dependencias (incluye PyTorch)                     |
+| `runs/`                        | Estado JSON + checkpoints `.pt`                    |
+| `data/`                        | MNIST / Fashion / CIFAR y `data/custom/`           |
+
 
 ---
+
+
 
 ## Posibles mejoras
 
@@ -326,6 +386,8 @@ En `runs/<run_id>/` quedan `best.pt`, `last.pt` y `epoch_XXX.pt`.
 - Docker Compose y un túnel estable en lugar de ngrok free.
 
 ---
+
+
 
 ## Conclusión
 
