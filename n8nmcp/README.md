@@ -246,7 +246,13 @@ Con `dataset: "auto"` n8n usa la primera carpeta de `data/custom/`. También val
 
 ![Workflow n8n: camino demo arriba e inject abajo](Imagenes/n8n_workflow.png)
 
-El botón **Iniciar** siempre manda `mode: demo`. Las otras rutas se disparan con el mismo webhook, cambiando `mode` en el JSON (el ejempas de **Ro**lo de PowerShell de arriba). Las cuatro salid**ute by Mode** comparten el tramo final: **Analyze and Apply → Resume → Compare → Final Status → Build Summary → Respond**. Resume son 2 épocas en todas.
+botón **Iniciar** siempre envía `mode: demo`. Las demás rutas utilizan el mismo webhook, pero se activan cambiando el valor de `mode` en el JSON de la solicitud, como en el ejemplo de PowerShell mostrado anteriormente.
+
+Las tres rutas principales (`demo`, `inject` y `analyze`) comparten el tramo final del workflow:
+
+**Analyze and Apply → Resume → Compare → Final Status → Build Summary → Respond**
+
+El nodo **Resume** ejecuta dos épocas adicionales en todos los modos. La diferencia entre las rutas está en las operaciones que se realizan antes de llegar al análisis y la recuperación.
 
 `demo` — experimento completo. Camino de arriba. Crea el run, entrena 2 épocas sanas, guarda el snapshot, arma la falla, entrena 1 época rota y después entra al tramo final. Es el de la captura y el del botón.
 
