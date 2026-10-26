@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/26cefc80-0cea-4450-8c63-7a8b3398ab68
+
 # Práctica: TrainGuard (n8n + MCP + Gemini)
 
 **TrainGuard** entrena un CNN pequeño (PyTorch, CPU) sobre **MNIST, Fashion-MNIST, CIFAR-10 o un dataset propio**, provoca fallas controladas pero reales (loss NaN, learning rate explosivo, estancamiento), guarda checkpoints `.pt` y recupera el run (rollback a `best.pt` o bajar el LR). Al final mide si se conservó el mejor resultado y si el entrenamiento pudo continuar.
