@@ -1,116 +1,113 @@
 # Práctica: TrainGuard (n8n + MCP + Gemini)
 
-Implementé **TrainGuard**: un sistema que simula el entrenamiento de una red neuronal, inyecta fallas típicas (loss NaN, LR explosivo, estancamiento) y aplica **recuperación automática** (rollback a checkpoint, bajar LR, alertar).
+**TrainGuard** entrena un CNN pequeño (PyTorch, CPU) sobre **MNIST, Fashion-MNIST, CIFAR-10 o un dataset propio**, provoca fallas controladas pero reales (loss NaN, learning rate explosivo, estancamiento), guarda checkpoints `.pt` y recupera el run (rollback a `best.pt` o bajar el LR). Al final mide si se conservó el mejor resultado y si el entrenamiento pudo continuar.
 
-La idea une tres piezas:
+Tres piezas:
 
-- **MCP (Model Context Protocol)** — servidor de tools que se ejecutan .
-- **n8n** — workflow que orquesta el escenario por webhook y llama esas tools vía un bridge HTTP.
-- **Gemini** (`gemini-3.5-flash-lite`) — LLM que, en el camino de n8n, **llama tools MCP** (function calling): lee métricas/checkpoints y aplica la recuperación.
-
-Así se demuestra tolerancia a fallas en un pipeline de ML: detectar la falla, decidir con evidencia (LLM o heurística) y recuperar el run.
+- **n8n** — orquesta el experimento. El webhook (o el botón **Iniciar** del dashboard) dispara el flujo: elegir dataset, entrenar, fallar, recuperar y comparar.
+- **MCP** — tools ejecutables (`start_training`, `advance_epochs`, `inject_fault`, `apply_recovery_action`, `compare_recovery`, …). n8n no habla MCP stdio; un bridge HTTP traduce cada nodo a una tool.
+- **Gemini** (`gemini-3.5-flash-lite`) — dentro de **Analyze and Apply**, lee métricas y checkpoints por function calling y aplica la recuperación. Sin API key, cae a una heurística local.
 
 ---
-
-
 
 ## ¿Qué es MCP?
 
-**MCP** es un protocolo para que un modelo use **herramientas y contexto reales**. No es un prompt: el prompt *indica* qué hacer; MCP *expone funciones ejecutables* (`start_training`, `inject_fault`, `apply_recovery_action`, etc.).
+MCP expone funciones reales. El prompt indica qué hacer; la tool lo ejecuta.
 
-En este proyecto el servidor MCP es `trainguard/mcp_server.py` (entrada para Claude Desktop: `run_mcp.py`).
+| Concepto | En TrainGuard |
+| --- | --- |
+| MCP server | `trainguard/mcp_server.py` |
+| Tool | Acción real (entrenar una época, listar `.pt`, rollback) |
+| Cliente | El bridge (n8n → HTTP) y Gemini (function calling) |
+| n8n | Orquesta el orden de las llamadas |
+| Dashboard | Dispara el webhook y muestra el proceso en vivo |
 
+n8n Cloud no habla MCP stdio. El bridge (`python -m trainguard.bridge.app`, puerto 8787) recibe HTTP y llama las tools. Con `USE_GEMINI=true` y `GEMINI_MCP_AGENT=true` (default), Gemini elige y ejecuta las tools de lectura y `apply_recovery_action`. Sin key, decide la heurística. Con `GEMINI_MCP_AGENT=false`, Gemini solo devuelve JSON y el bridge aplica la acción.
 
-| Concepto    | En TrainGuard                                              |
-| ----------- | ---------------------------------------------------------- |
-| MCP server  | Caja de tools (`mcp_server.py`)                            |
-| Tool        | Acción real (inyectar falla, listar checkpoints, rollback) |
-| Cliente MCP | Claude Desktop, Gemini (function calling) o el bridge      |
-| Gemini      | Cliente MCP vía function calling (decide y aplica)         |
-| n8n         | Orquesta el flujo y dispara el bridge                      |
+## Por qué n8n y MCP juntos
 
+Cada uno resuelve una mitad distinta del problema. Juntos forman el watchdog.
 
----
+| | n8n | MCP |
+| --- | --- | --- |
+| Pregunta que responde | ¿Cuándo y en qué orden? | ¿Qué se puede hacer de verdad? |
+| En la demo | Webhook, dataset, falla, épocas sanas, época rota, resume, compare | `start_training`, `advance_epochs`, `inject_fault`, `apply_recovery_action` |
+| Lo que no hace | No entrena ni carga un `.pt` | No decide el guion ni se dispara solo |
 
+n8n solo, con nodos HTTP, podría pegarle a una API, pero cada cambio de trainer obligaría a reescribir URLs y cuerpos. MCP solo deja las tools listas, pero alguien tiene que llamarlas a mano y en orden. La combinación es esta:
 
+1. **n8n es el orquestador.** El canvas es el experimento: start, entrenar, romper, leer evidencia, recuperar, medir. Cambiar el orden o el dataset es mover nodos, no tocar PyTorch.
+2. **MCP es el contrato.** Las mismas tools sirven al bridge, a Gemini y a cualquier otro cliente. Entrenar una época o hacer rollback es una función con nombre, argumentos y resultado, no un script suelto.
+3. **El bridge es el adaptador.** n8n Cloud habla HTTP; el servidor MCP habla tools. Cada nodo HTTP Request es una tool. Por eso en el dashboard cada fila dice `n8n · Inject Fault → MCP · inject_fault`.
+4. **Gemini es un cliente MCP dentro de un nodo.** En **Analyze and Apply** no inventa el loss: pide `get_latest_metrics` y `list_checkpoints`, y si confía llama `apply_recovery_action`. n8n no elige el rollback; el modelo lo elige con evidencia.
 
-## Propuesta del escenario
-
-
-
-### El problema
-
-Un entrenamiento puede “seguir corriendo” pero estar roto: loss en NaN, learning rate demasiado alto, o métricas estancadas. Sin un watchdog, se pierde tiempo y a veces el mejor checkpoint.
-
-### Por qué n8n + MCP + Gemini
-
-- **MCP** define las capacidades del agente (tools estables, reutilizables).
-- **n8n** automatiza: webhook → start → inject fault → analyze/apply → respuesta.
-- **Gemini** es cliente MCP: pide tools, lee evidencia y llama `apply_recovery_action`.
-- **Claude Desktop** usa las *mismas* tools a mano, para demostrar el servidor MCP sin n8n.
-
-
-
-### Qué tipo de falla se simula
-
-
-| Falla (`kind`) | Síntoma                | Acción típica          |
-| -------------- | ---------------------- | ---------------------- |
-| `nan_loss`     | loss = NaN, accuracy 0 | `rollback_checkpoint`  |
-| `exploding_lr` | LR alto / loss dispara | `reduce_lr_and_resume` |
-| `stall`        | loss casi no baja      | reducir LR o alertar   |
-
-
-
-
-### Qué estrategia de tolerancia se aplica
-
-1. **Checkpointing** — se guardan checkpoints sanos por época.
-2. **Detección** — Gemini (o el bridge) lee métricas recientes con tools MCP.
-3. **Decisión** — Gemini elige una acción con `confidence` (si no hay API key, heurística local).
-4. **Recuperación** — Gemini llama `apply_recovery_action` vía MCP cuando confía; si no, `alert_only`.
-5. **Trazabilidad** — evidencia + feed en el dashboard MCP.
+Lo útil para la clase: n8n demuestra la automatización (el flujo se ve y se dispara con un botón) y MCP demuestra que la recuperación es una acción real sobre pesos y checkpoints, no un mensaje en un JSON.
 
 ---
 
+## El escenario
 
+Un entrenamiento puede seguir “corriendo” y estar roto: loss en NaN, LR demasiado alto o métricas estancadas. Sin un watchdog se pierde tiempo y, a veces, el mejor checkpoint.
+
+TrainGuard lo demuestra con un run real (TinyCNN), no con una curva inventada. El dataset no está fijo: n8n lo resuelve y MCP arranca el trainer correcto.
+
+### Fallas
+
+La falla se **arma** a propósito (`inject_fault`). El síntoma sale del loop de PyTorch, no de un JSON inventado.
+
+| Falla (`kind`) | Cómo se provoca | Acción típica |
+| --- | --- | --- |
+| `nan_loss` | El loss del batch se multiplica por NaN y los pesos dejan de ser finitos | `rollback_checkpoint` |
+| `exploding_lr` | El optimizer pasa a LR = 5.0 y sigue entrenando | `reduce_lr_and_resume` |
+| `stall` | LR ≈ 0 y el 90 % de las labels se aleatorizan | reducir LR o alertar |
+
+Si se pide bajar el LR y los pesos ya son NaN, el engine escala solo a rollback.
+
+### Tolerancia
+
+1. **Checkpoint real.** Cada época sana guarda `epoch_XXX.pt` (`state_dict`, optimizer, métricas, `sha256`). `best.pt` solo se escribe si mejora `val_acc`.
+2. **Snapshot.** Antes de la falla se guarda `best_acc` y el hash de `best.pt`.
+3. **Detección.** Gemini (o la heurística) lee estado, métricas y checkpoints por MCP.
+4. **Recuperación.** `rollback_checkpoint` hace `torch.load(best.pt)` y **no pisa** ese archivo. `reduce_lr_and_resume` baja el LR del optimizer.
+5. **Resume.** n8n pide más épocas desde los pesos recuperados.
+6. **Medición.** `compare_recovery` contrasta el best de antes vs el de después:
+   - `preserved_best` — `best_acc_after >= best_acc_before`
+   - `resumed` + `latest_healthy` — el run sigue y la última época no es NaN
+   - `recovery_success` — las dos cosas
+
+En el dashboard, la fila de época **repetida** (por ejemplo un segundo “epoch 2” con la misma accuracy) es el rollback: no entrena, reevalúa `best.pt` y deja una métrica `restored_from_checkpoint`. Después vienen las épocas nuevas, ya sanas. Si esas superan el récord, el `sha256` de `best.pt` cambia **después** del rollback, porque el archivo se actualizó al mejorar, no porque el rollback lo haya pisado.
+
+---
 
 ## Cómo está armado
 
 ```text
-Claude Desktop ──(MCP stdio)──► mcp_server.py ──► engine.py
-                                                      ▲
-n8n ──HTTP──► ngrok ──► bridge ──(MCP Client)─────────┘
-                         │
-                         ├── Gemini (function calling) pide tools MCP
-                         ├── MCP: get_training_status / metrics / checkpoints
-                         ├── MCP: apply_recovery_action (si confía)
-                         └── /dashboard (feed visual)
+Dashboard (Iniciar) ──webhook──► n8n
+                                   │
+                                   ▼
+                              ngrok ──► bridge :8787
+                                           │
+                                           ├── Gemini pide tools MCP
+                                           └── MCP Client ──► engine ──► trainer (TinyCNN + .pt)
 ```
 
-
-| Pieza                              | Rol                                                  |
-| ---------------------------------- | ---------------------------------------------------- |
-| `trainguard/engine.py`             | Simulación de entrenamiento, fallas y recuperación   |
-| `trainguard/mcp_server.py`         | Servidor MCP (tools)                                 |
-| `run_mcp.py`                       | Entrada limpia para Claude Desktop                   |
-| `trainguard/bridge/app.py`         | Bridge HTTP: n8n → MCP (+ agente Gemini)             |
-| `trainguard/llm_gemini.py`         | Gemini con function calling sobre tools MCP          |
-| `trainguard/bridge/dashboard.html` | Monitor en vivo de llamadas MCP                      |
-| `n8n/trainguard-workflow.json`     | Workflow importable en n8n                           |
-| `.env`                             | `GEMINI_*` / `USE_GEMINI` / `GEMINI_MCP_AGENT`       |
-| `runs/current_run.json`            | Estado del run actual                                |
-
-
-n8n Cloud no habla MCP stdio; el **bridge** traduce HTTP a **llamadas MCP**. Con `USE_GEMINI=true` y `GEMINI_MCP_AGENT=true` (default), **Gemini elige y ejecuta tools MCP** (como Claude Desktop). Sin key, cae a heurística local. Con `GEMINI_MCP_AGENT=false` queda el modo legacy (Gemini solo JSON; el bridge aplica).
+| Pieza | Rol |
+| --- | --- |
+| `trainguard/datasets.py` | Catálogo: MNIST, Fashion-MNIST, CIFAR-10, ImageFolder, ZIP por URL |
+| `trainguard/trainer.py` | TinyCNN adaptable + lectura/escritura de `.pt` |
+| `trainguard/engine.py` | Loop, fallas controladas, rollback y `compare_recovery` |
+| `trainguard/mcp_server.py` | Servidor MCP (tools) |
+| `trainguard/bridge/app.py` | HTTP: n8n y dashboard → MCP |
+| `trainguard/llm_gemini.py` | Gemini con function calling sobre tools MCP |
+| `trainguard/bridge/dashboard.html` | Botón Iniciar, métricas, recovery y feed MCP |
+| `n8n/trainguard-workflow.json` | Workflow importable |
+| `.env` | `GEMINI_*`, `N8N_WEBHOOK_URL`, `BRIDGE_PUBLIC_URL` |
+| `runs/<run_id>/*.pt` | `last.pt`, `best.pt`, `epoch_XXX.pt` |
+| `data/` | Datasets torchvision y carpetas custom (gitignore) |
 
 ---
 
-
-
 ## Cómo ejecutarlo
-
-
 
 ### 1. Dependencias
 
@@ -120,70 +117,57 @@ cd n8nmcp
 pip install -r requirements.txt
 ```
 
-
-
-### 2. Gemini (LLM en el camino n8n)
+### 2. Variables
 
 ```powershell
 copy .env.example .env
-# Edita .env: GEMINI_API_KEY=...  GEMINI_MODEL=gemini-3.5-flash-lite
-#             USE_GEMINI=true  GEMINI_MCP_AGENT=true
 ```
 
-Flujo de `/analyze-and-apply` con Gemini + MCP (function calling):
+En `.env`:
 
-1. El bridge expone a Gemini las tools MCP (schemas)
-2. **Gemini** llama MCP: lee `get_training_status` / `get_latest_metrics` / `list_checkpoints`
-3. **Gemini** decide y llama MCP `apply_recovery_action` (si `confidence` alta)
-4. Responde JSON (`decided_by: gemini_mcp`, `llm_uses_mcp: true`)
+```text
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-3.5-flash-lite
+USE_GEMINI=true
+GEMINI_MCP_AGENT=true
+N8N_WEBHOOK_URL=https://TU-INSTANCIA.app.n8n.cloud/webhook-test/trainguard
+BRIDGE_PUBLIC_URL=https://TU-URL.ngrok-free.dev
+```
 
-> No pegues la API key en chats ni en el README. Si se filtró, revócala y genera otra.
+No pegues la API key en el README ni en chats. Si se filtró, revócala.
 
+`/analyze-and-apply` con Gemini:
 
+1. El bridge le pasa los schemas MCP.
+2. Gemini llama `get_training_status`, `get_latest_metrics` y `list_checkpoints`.
+3. Si confía, llama `apply_recovery_action`.
+4. La respuesta trae `decided_by: gemini_mcp`.
 
-### 3. Bridge + ngrok
+### 3. Bridge y túnel
 
-Terminal 1 — bridge:
+Terminal 1:
 
 ```powershell
 python -m trainguard.bridge.app
 ```
 
-![Bridge Uvicorn en el puerto 8787](Imagenes/bridge_uvicorn.png)
-
-Terminal 2 — túnel público para n8n Cloud:
+Terminal 2 (n8n Cloud tiene que alcanzar tu máquina):
 
 ```powershell
 ngrok http 8787
 ```
 
-![ngrok forwarding al bridge local](Imagenes/ngrok_tunnel.png)
+`BRIDGE_PUBLIC_URL` debe ser la URL HTTPS de ngrok, sin barra final.
 
-Dashboard: [http://127.0.0.1:8787/dashboard](http://127.0.0.1:8787/dashboard)
+### 4. n8n
 
-### 4. Claude Desktop (MCP directo)
+1. Importa `n8n/trainguard-workflow.json` (reimpórtalo si ya tenías una versión anterior).
+2. **Listen for test event**, o publica el workflow y usa la URL Production en `N8N_WEBHOOK_URL`.
+3. Reinicia el bridge después de cambiar `.env`.
 
-Copia el bloque `mcpServers.trainguard` de `claude_desktop_config.json` a la config real de Claude y reinicia. En un chat nuevo:
+Desde el dashboard: [http://127.0.0.1:8787/dashboard](http://127.0.0.1:8787/dashboard). Elige dataset y falla, pulsa **Iniciar**. n8n orquesta; el dashboard pinta pasos, métricas, `recovery_success` y cada tool MCP.
 
-```text
-Usa las tools MCP de TrainGuard en este orden:
-1) start_training
-2) inject_fault con kind=nan_loss
-3) advance_epochs con n=3
-4) get_latest_metrics
-5) list_checkpoints
-6) analyze_and_apply_recovery
-
-Explica qué falla detectaste, qué evidencia viste y qué acción de recuperación aplicaste.
-```
-
-
-
-### 5. n8n
-
-1. Importa `n8n/trainguard-workflow.json`.
-2. **Listen for test event** (o publica y usa la URL Production).
-3. Dispara el webhook con tu URL de ngrok:
+O desde PowerShell (el JSON va **dentro** de `-Body`; PowerShell no acepta un `{ ... }` suelto):
 
 ```powershell
 Invoke-RestMethod -Method Post `
@@ -192,186 +176,161 @@ Invoke-RestMethod -Method Post `
   -Body '{
     "mode": "demo",
     "kind": "nan_loss",
+    "dataset": "fashion_mnist",
     "bridge_base_url": "https://TU-URL.ngrok-free.dev"
   }'
 ```
 
 `mode`: `demo` | `analyze` | `inject`  
-`kind`: `nan_loss` | `exploding_lr` | `stall`
+`kind`: `nan_loss` | `exploding_lr` | `stall`  
+`dataset`: `auto` | `mnist` | `fashion_mnist` | `cifar10` | `custom`
+
+La primera vez, cada dataset de torchvision se descarga a `data/`. Una época en CPU tarda unos 10–40 s. Los nodos de entrenamiento tienen timeout de 180 s.
+
+### Dataset propio
+
+Imágenes por carpeta (ImageFolder). No hace falta cambiar el workflow:
+
+```text
+data/custom/mi_dataset/
+  train/clase_a/*.jpg
+  train/clase_b/*.jpg
+  val/clase_a/*.jpg
+  val/clase_b/*.jpg
+```
+
+Con `dataset: "auto"` n8n usa la primera carpeta de `data/custom/`. También vale `dataset: "custom"` más `dataset_path`, o un ZIP por `dataset_url` con la misma estructura. Si no hay `val/`, el trainer parte el train 80/20. El CNN se adapta a canales, tamaño y número de clases.
 
 ---
 
+## Nodos del workflow
 
+![Workflow n8n: camino demo arriba e inject abajo](Imagenes/n8n_workflow.png)
 
-## Nodos del workflow n8n (qué hace cada uno)
+El canvas tiene dos caminos que se juntan en **Get Metrics**. El de arriba es `demo` (el del botón Iniciar): arranca el run, entrena sano, guarda el snapshot, inyecta la falla y entrena la época rota. El de abajo es `inject`: solo falla y entrena sobre un run que ya existía. `analyze` entra directo a **Analyze and Apply**.
 
-![Workflow n8n TrainGuard (ejecución OK)](Imagenes/n8n_workflow.png)
+Camino `demo` (el del botón Iniciar):
 
+`Webhook → Normalize → List Datasets → Resolve Dataset → Route(demo) → Start → Train Healthy → Snapshot → Inject → Train Broken → Metrics → Checkpoints → Analyze and Apply → Resume → Compare → Final Status → Build Summary → Respond`
 
-| Nodo                   | Tipo           | Qué hace                                                                                                            |
-| ---------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------- |
-| **Webhook TrainGuard** | Webhook (POST) | Entrada del flujo. Recibe JSON (`mode`, `kind`, `bridge_base_url`).                                                 |
-| **Normalize Input**    | Code           | Limpia el body, pone defaults (`mode=demo`, `kind=nan_loss`) y normaliza la URL del bridge.                         |
-| **Route by Mode**      | Switch         | Bifurca según `mode`: `demo`, `analyze`, `inject` o fallback.                                                       |
-| **Start Training**     | HTTP Request   | `POST {bridge}/start` → el bridge llama la tool MCP `start_training`. Solo en path `demo`.                          |
-| **Inject Fault**       | HTTP Request   | `POST {bridge}/inject-fault` → MCP `inject_fault` + `advance_epochs` (aparecen métricas con la falla). Path `demo`. |
-| **Inject Fault Only**  | HTTP Request   | Igual que inject, pero sin pasar por start (path `inject`).                                                         |
-| **Analyze and Apply**  | HTTP Request   | `POST {bridge}/analyze-and-apply` → **Gemini llama tools MCP** (lee + aplica recovery).                             |
-| **Get Status**         | HTTP Request   | `GET {bridge}/status` → tool MCP `get_training_status` para confirmar el estado final.                              |
-| **Build Summary**      | Code           | Arma la respuesta: `decided_by`, `model`, tools MCP usadas, acción, evidencia, banner.                              |
-| **Respond to Webhook** | Respond        | Devuelve el JSON resumen al cliente que llamó el webhook.                                                           |
+| Nodo | Qué hace |
+| --- | --- |
+| **Webhook TrainGuard** | Entrada POST (`mode`, `kind`, `dataset`, `bridge_base_url`, …). |
+| **Normalize Input** | Defaults: `mode=demo`, `kind=nan_loss`, `dataset=auto`, 2 épocas sanas, 1 rota, 2 de resume. |
+| **List Datasets** | `GET /datasets` → MCP `list_datasets`. |
+| **Resolve Dataset** | Elige URL, path, la primera carpeta `data/custom/` o MNIST. |
+| **Route by Mode** | `demo` (experimento completo), `analyze` (solo vigilar), `inject` (falla sobre un run ya creado). |
+| **Start Training** | `POST /start` → MCP `start_training`. Solo en `demo`. |
+| **Train Healthy** | `POST /advance` con 2 épocas. Escribe `best.pt`. |
+| **Snapshot Before** | `GET /status`. Guarda `best_acc` y `sha256` antes de la falla. |
+| **Inject Fault** | `POST /inject-fault`. Arma la falla; no entrena. |
+| **Train Broken** | `POST /advance` con 1 época rota (la fila NaN). |
+| **Inject Fault Only** | Igual que Inject, path `inject`, sin Start. |
+| **Train Broken Only** | La época rota de ese path. |
+| **Get Metrics** | `GET /metrics` → MCP `get_latest_metrics`. |
+| **List Checkpoints** | `GET /checkpoints` → paths y `sha256`. |
+| **Analyze and Apply** | Gemini llama tools MCP y aplica rollback o baja el LR. |
+| **Resume Training** | 2 épocas desde los pesos recuperados. |
+| **Compare Recovery** | `GET /compare` → `preserved_best`, `recovery_success`. |
+| **Final Status** | Estado final del run. |
+| **Build Summary** | JSON de respuesta: dataset, acción, evidencia, best antes/después. |
+| **Respond to Webhook** | Devuelve ese JSON al dashboard o a PowerShell. |
 
-
-Path típico de la demo (`mode=demo`):
-
-`Webhook → Normalize → Route(demo) → Start Training → Inject Fault → Analyze and Apply → Get Status → Build Summary → Respond`
-
----
-
-
-
-## Demostración
-
-
-
-### Camino A — Claude Desktop + MCP
-
-Claude carga la integración `trainguard`, ejecuta las tools y reporta NaN en la época 3, checkpoints sanos y recuperación `rollback_checkpoint`, dejando el run en `running`.
-
-![Claude Desktop usando tools MCP de TrainGuard](Imagenes/claude_mcp_tools.png)
-
-### Camino B — n8n + MCP + Gemini
-
-El webhook dispara el workflow; Gemini (`gemini-3.5-flash-lite`) actúa como cliente MCP (function calling). En la respuesta se ve:
-
-- `decided_by: gemini_mcp`
-- `llm_uses_mcp: True`
-- `model: gemini-3.5-flash-lite`
-- `called_via_mcp: True`
-- `gemini_requested_mcp_tools: [...]` (tools que el LLM pidió)
-- `mcp_story: n8n → bridge → MCP:get_training_status → … → MCP:apply_recovery_action`
-- `action: rollback_checkpoint`, `applied: True`
-
-![Respuesta n8n con Gemini + evidencia MCP](Imagenes/consola_n8n_gemini.png)
-
-### Monitor visual de tools MCP
-
-El dashboard muestra en vivo cada tool MCP invocada desde n8n (`start_training`, `inject_fault`, `get_latest_metrics`, `apply_recovery_action`, …).
-
-![Dashboard TrainGuard MCP en vivo](Imagenes/dashboard_mcp.png)
+`analyze` entra directo en **Analyze and Apply**: mira un run que ya existe y recupera si hace falta, sin inyectar otra falla.
 
 ---
 
+## Qué se ve en el dashboard
 
+Demo completa: el botón **Iniciar** dispara n8n y el dashboard muestra las tools MCP, la falla y la recuperación.
 
-## Tools MCP expuestas
+<video src="https://github.com/Alejandro498/ComputacionToleranteaFallas2026B/raw/main/n8nmcp/Imagenes/n8nmcp.mp4" controls width="100%"></video>
 
+[Abrir el video](Imagenes/n8nmcp.mp4) si el reproductor no carga (hace falta que el `.mp4` esté en `main`).
 
-| Tool                         | Qué hace                                         |
-| ---------------------------- | ------------------------------------------------ |
-| `start_training`             | Inicia un run simulado                           |
-| `advance_epochs`             | Avanza N épocas y registra métricas              |
-| `get_training_status`        | Estado completo del run                          |
-| `get_latest_metrics`         | Últimas métricas                                 |
-| `list_checkpoints`           | Checkpoints y mejor loss                         |
-| `inject_fault`               | Inyecta `nan_loss` / `exploding_lr` / `stall`    |
-| `analyze_training`           | Recomienda acción (heurística JSON)              |
-| `apply_recovery_action`      | Aplica una acción concreta                       |
-| `analyze_and_apply_recovery` | Analiza y aplica (heurística; Claude / fallback) |
+![Dashboard al terminar un demo con nan_loss](Imagenes/dashboard_mcp.png)
 
+Arriba quedan tres papeles fijos: **n8n** orquesta, el **bridge** traduce HTTP a MCP, y **MCP** entrena y recupera. Debajo, cada paso muestra el nodo de n8n y la tool MCP. La gráfica pinta en verde las épocas sanas, en rojo el NaN y en ámbar el rollback. El recuadro de recuperación resume si el mejor resultado sobrevivió.
+
+La captura es MNIST con `nan_loss`, ya terminada: el indicador dice **DONE · success** y el veredicto es **Se conservó el mejor** (`0.699 → 0.92`).
+
+**Dataset / Falla / Iniciar.** Eliges el dataset y la falla. **Iniciar** manda el webhook a n8n. n8n tiene que estar en *Listen for test event* (o usar la URL Production). Las URLs del webhook y de ngrok están en el desplegable de abajo.
+
+**Pasos.** Se encienden cuando esa tool ya corrió. Cada caja tiene dos líneas: arriba el nodo de n8n (ámbar) y abajo la tool MCP (verde). En la captura están los seis: List Datasets, Start Training, Train / Resume, Inject Fault, Analyze · Gemini y Compare.
+
+**Tarjetas.**
+
+| Tarjeta | En la captura | Qué es |
+| --- | --- | --- |
+| Dataset | MNIST | El dataset con el que arrancó `start_training`. |
+| Run / época | `run-62c93fe8` · e4 | Id del run y la época en la que quedó. |
+| Best acc | 0.92 | Mejor `val_acc` guardada en `best.pt` después de recuperar. |
+| Falla / acción | `rollback_checkpoint` | Lo que aplicó Gemini por MCP. |
+
+**Accuracy por época.** La altura de la barra es `val_acc`. Verde = época sana, rojo = NaN, ámbar = la fila del rollback (misma accuracy que el `best.pt`, no una época nueva). La tabla de abajo es el mismo dato en números. `ok = sí` significa loss finito y pesos sanos.
+
+| e | val_loss | val_acc | Qué pasó |
+| --- | --- | --- | --- |
+| 1 | 2.15 | 0.301 | Primera época sana. |
+| 2 | 0.84 | 0.699 | Mejor checkpoint hasta ahí. Se escribió `best.pt`. |
+| 3 | NaN | 0 | Falla `nan_loss`. El run se rompió. |
+| 2 | 0.84 | 0.699 | Rollback: no entrena, recarga `best.pt` y lo reevalúa. Por eso la época 2 se repite. |
+| 3 | 0.52 | 0.827 | Resume. La época 3 ahora es sana y supera el best. |
+| 4 | 0.30 | 0.92 | Sigue entrenando. El mejor resultado no se perdió; mejoró. |
+
+**Recuperación.** Sale de `compare_recovery`, cuando n8n llega al nodo Compare. En la captura el título es **Se conservó el mejor** y la flecha es `0.699 → 0.92` (Δ 0.221): la accuracy de `best.pt` antes de la falla y después del resume. `resumed=true` y `sano=true` dicen que el run siguió y que la última época no es NaN.
+
+**MCP tool feed.** Cada fila es un cruce n8n → MCP, de la más reciente a la más vieja. Se lee `n8n · Analyze and Apply → MCP · apply_recovery_action`. Ahí se ve que Gemini pidió métricas y checkpoints y luego aplicó el rollback. El badge OK es la tool; el tiempo de al lado es cuánto tardó.
+
+Si el texto bajo los selectores dice **Bridge offline**, la página ya no alcanza `http://127.0.0.1:8787` (el proceso del bridge se detuvo). Los números de las tarjetas son el último estado que sí llegó. Reinicia `python -m trainguard.bridge.app` para volver a sondear.
+
+En `runs/<run_id>/` quedan `best.pt`, `last.pt` y `epoch_XXX.pt`.
 
 ---
 
+## Tools MCP
 
+| Tool | Qué hace |
+| --- | --- |
+| `list_datasets` | Builtin + carpetas `data/custom` |
+| `start_training` | Crea el run (auto / torchvision / custom) |
+| `advance_epochs` | Entrena N épocas y persiste `.pt` |
+| `get_training_status` | Estado completo |
+| `get_latest_metrics` | Últimas métricas de validación |
+| `list_checkpoints` | `.pt`, `sha256` y `best.pt` |
+| `inject_fault` | Arma `nan_loss` / `exploding_lr` / `stall` |
+| `analyze_training` | Recomienda una acción (heurística) |
+| `apply_recovery_action` | Carga `best.pt` o baja el LR |
+| `analyze_and_apply_recovery` | Analiza y aplica si la confianza es alta (fallback sin Gemini) |
+| `compare_recovery` | ¿Se conservó `best_acc`? ¿El run reanudó? |
+
+---
 
 ## Archivos
 
-
-| Archivo / carpeta              | Rol                                          |
-| ------------------------------ | -------------------------------------------- |
-| `trainguard/`                  | Engine, MCP server, bridge y cliente Gemini  |
-| `run_mcp.py`                   | Entrypoint MCP para Claude                   |
-| `n8n/trainguard-workflow.json` | Workflow n8n                                 |
-| `claude_desktop_config.json`   | Ejemplo de config MCP                        |
-| `.env.example`                 | Plantilla de variables Gemini                |
-| `requirements.txt`             | Dependencias Python                          |
-| `Imagenes/`                    | Capturas de la demo                          |
-| `runs/`                        | Estado persistido del entrenamiento simulado |
-
-
-
-| Captura                           | Contenido                          |
-| --------------------------------- | ---------------------------------- |
-| `Imagenes/bridge_uvicorn.png`     | Bridge escuchando en `:8787`       |
-| `Imagenes/ngrok_tunnel.png`       | Túnel ngrok al bridge              |
-| `Imagenes/n8n_workflow.png`       | Workflow n8n ejecutado OK          |
-| `Imagenes/consola_n8n_gemini.png` | Respuesta con `decided_by: gemini_mcp` |
-| `Imagenes/dashboard_mcp.png`      | Feed visual de tools MCP           |
-| `Imagenes/claude_mcp_tools.png`   | Claude Desktop usando MCP          |
-
+| Archivo / carpeta | Rol |
+| --- | --- |
+| `trainguard/` | Trainer, engine, MCP, bridge y cliente Gemini |
+| `n8n/trainguard-workflow.json` | Workflow n8n |
+| `.env.example` | Plantilla Gemini, webhook y URL pública del bridge |
+| `requirements.txt` | Dependencias (incluye PyTorch) |
+| `runs/` | Estado JSON + checkpoints `.pt` |
+| `data/` | MNIST / Fashion / CIFAR y `data/custom/` |
 
 ---
 
+## Posibles mejoras
 
-
-## Posibles mejoras a futuro
-
-
-
-### Entrenamiento más real
-
-- Sustituir la simulación de `engine.py` por un entrenamiento real (PyTorch/TensorFlow) con MNIST/CIFAR pequeño.
-- Guardar checkpoints `.pt` / `.ckpt` de verdad y validar integridad (checksum) antes del rollback.
-- Integrar métricas de W&B, MLflow o TensorBoard en lugar del JSON local.
-
-
-
-### Más fallas y políticas
-
-- Nuevas fallas: OOM de GPU, proceso colgado, dataset corrupto, drift de clases.
-- Réplicas con distinta seed y “consenso” (descartar el run anómalo).
-- Modo degradado: si no hay checkpoint sano, entrenar con batch más chico / modelo más ligero.
-- Human-in-the-loop: si `confidence < umbral`, n8n pide aprobación en Slack/Discord antes de aplicar.
-
-
-
-### MCP / agente
-
-- Probar `GEMINI_MODEL=gemini-3.8-flash` u otros modelos.
-- Resources MCP (no solo tools): exponer `metrics://latest` o el runbook como recurso.
-- Auth y scopes en tools peligrosas (`stop_training`, `inject_fault`).
-- Dejar que Gemini también elija el `mode` del workflow n8n (no solo analyze).
-
-
-
-### n8n / automatización
-
-- Cron periódico que solo haga `analyze`, sin demos manuales.
-- Notificaciones (Slack/Discord/Email) con el `mcp_story` y link al dashboard.
-- Webhook de GitHub/CI: si fallan tests del trainer, disparar TrainGuard.
-- Cola de reintentos si el bridge o ngrok caen.
-
-
-
-### Observabilidad y UI
-
-- Persistir el feed MCP y graficar historial de recuperaciones.
-- Dashboard con curva loss/accuracy en vivo y marca del rollback.
-- Informe de incidente PDF/Markdown por run.
-- Multi-run en el dashboard.
-
-
-
-### Despliegue / académico
-
-- Docker Compose para bridge + MCP; túnel estable (Cloudflare) en lugar de ngrok free.
-- Comparar con checkpointing clásico midiendo tiempo perdido con/sin recuperación.
-- Tabla falla inyectada vs acción vs éxito (cobertura).
+- Watchdog: entrenar en loop y recuperar solo cuando las métricas se rompen, sin nodo Inject.
+- Más fallas: OOM, proceso colgado, dataset corrupto.
+- Human-in-the-loop si `confidence` es baja (Slack/Discord) antes de aplicar.
+- Resources MCP (`metrics://latest`), auth en tools como `inject_fault`.
+- Cron en n8n que solo haga `analyze`.
+- Informe de incidente por run (Markdown o PDF).
+- Docker Compose y un túnel estable en lugar de ngrok free.
 
 ---
-
-
 
 ## Conclusión
 
-TrainGuard muestra tolerancia a fallas en entrenamiento: se inyecta una falla, se recoge evidencia y se recupera (rollback / LR). **MCP** estandariza las tools; **Claude** y **Gemini** las usan como clientes (stdio vs function calling en el bridge); **n8n** orquesta el flujo. El dashboard hace visible que las tools las pide el LLM o el bridge, siempre por MCP.
+TrainGuard muestra tolerancia a fallas sobre un entrenamiento real: se provoca una falla controlada, se guarda evidencia en checkpoints `.pt` y se recupera cargando `best.pt` o bajando el LR. **n8n** orquesta el experimento y el dataset; **MCP** ejecuta el trainer; **Gemini** decide con las tools. `compare_recovery` y el dashboard dicen si el mejor resultado se conservó y si el run pudo seguir.

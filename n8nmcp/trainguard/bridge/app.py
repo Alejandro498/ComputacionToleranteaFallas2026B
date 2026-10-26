@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import json
+import os
+import threading
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 import uvicorn
+
+load_dotenv()
 
 from trainguard.bridge.mcp_gateway import (
     begin_trace,
@@ -26,18 +34,26 @@ from trainguard.llm_gemini import (
     run_gemini_mcp_agent,
 )
 
-DASHBOARD_HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")
+DASHBOARD_PATH = Path(__file__).parent / "dashboard.html"
 
 app = FastAPI(
     title="TrainGuard Bridge",
-    version="0.4.0",
+    version="0.6.0",
     description="HTTP façade for n8n that invokes TrainGuard exclusively via MCP.",
 )
 
 
 class StartBody(BaseModel):
-    max_epochs: int = 12
+    max_epochs: int = 6
     lr: float = 0.01
+    train_size: int = 2000
+    val_size: int = 1000
+    batch_size: int = 64
+    seed: int = 42
+    dataset: str = "auto"
+    dataset_path: str = ""
+    dataset_url: str = ""
+    image_size: int = 0
 
 
 class FaultBody(BaseModel):
@@ -51,6 +67,29 @@ class AdvanceBody(BaseModel):
 class ActionBody(BaseModel):
     action: str
     reason: str = ""
+
+
+class RunBody(BaseModel):
+    webhook_url: str
+    bridge_base_url: str = ""
+    dataset: str = "auto"
+    kind: str = "nan_loss"
+    mode: str = "demo"
+
+
+def _fire_n8n_webhook(url: str, payload: dict[str, Any]) -> None:
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=300) as resp:  # noqa: S310
+            resp.read()
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return
 
 
 def _with_mcp_meta(payload: Any, tool: str) -> dict[str, Any]:
@@ -84,7 +123,7 @@ async def mcp_trace_middleware(request: Request, call_next):
 @app.get("/", response_class=HTMLResponse)
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard() -> HTMLResponse:
-    return HTMLResponse(DASHBOARD_HTML)
+    return HTMLResponse(DASHBOARD_PATH.read_text(encoding="utf-8"))
 
 
 @app.get("/mcp-events")
@@ -101,6 +140,72 @@ async def mcp_events() -> dict[str, Any]:
 async def mcp_events_clear() -> dict[str, str]:
     clear_event_log()
     return {"status": "cleared"}
+
+
+@app.get("/config")
+async def dashboard_config() -> dict[str, Any]:
+    from trainguard.engine import available_datasets
+
+    return {
+        "n8n_webhook_url": os.getenv("N8N_WEBHOOK_URL", "").strip(),
+        "bridge_public_url": os.getenv("BRIDGE_PUBLIC_URL", "").strip(),
+        "datasets": available_datasets(),
+        "kinds": ["nan_loss", "exploding_lr", "stall"],
+        "modes": ["demo", "analyze", "inject"],
+    }
+
+
+@app.get("/live")
+async def live() -> dict[str, Any]:
+    """Dashboard snapshot — reads state without recording a MCP tool call."""
+    from trainguard.engine import get_status
+
+    state = get_status()
+    metrics = state.get("metrics") or []
+    return {
+        "run_id": state.get("run_id"),
+        "status": state.get("status"),
+        "epoch": state.get("epoch"),
+        "max_epochs": state.get("max_epochs"),
+        "lr": state.get("lr"),
+        "fault": state.get("fault"),
+        "best_acc": state.get("best_acc"),
+        "best_loss": state.get("best_loss"),
+        "dataset": state.get("dataset"),
+        "last_action": state.get("last_action"),
+        "recovery": state.get("recovery_report"),
+        "metrics": metrics[-8:],
+        "updated_at": state.get("updated_at"),
+    }
+
+
+@app.post("/run")
+async def run_from_dashboard(body: RunBody) -> dict[str, Any]:
+    """Fire the n8n webhook so the canvas stays the orchestrator."""
+    webhook = body.webhook_url.strip()
+    if not webhook.startswith(("http://", "https://")):
+        return {"ok": False, "error": "webhook_url must be http(s)"}
+    payload = {
+        "mode": body.mode or "demo",
+        "kind": body.kind or "nan_loss",
+        "dataset": body.dataset or "auto",
+        "bridge_base_url": (
+            body.bridge_base_url.strip()
+            or os.getenv("BRIDGE_PUBLIC_URL", "").strip()
+        ),
+    }
+    thread = threading.Thread(
+        target=_fire_n8n_webhook,
+        args=(webhook, payload),
+        daemon=True,
+    )
+    thread.start()
+    return {
+        "ok": True,
+        "started": True,
+        "payload": payload,
+        "message": "Webhook enviado a n8n. El dashboard mostrará el proceso vía MCP.",
+    }
 
 
 @app.get("/health")
@@ -122,12 +227,29 @@ async def status() -> dict[str, Any]:
     return _with_mcp_meta(data, "get_training_status")
 
 
+@app.get("/datasets")
+async def datasets() -> dict[str, Any]:
+    data = await call_tool("list_datasets")
+    return _with_mcp_meta(data, "list_datasets")
+
+
 @app.post("/start")
 async def start(body: StartBody | None = None) -> dict[str, Any]:
     body = body or StartBody()
     data = await call_tool(
         "start_training",
-        {"max_epochs": body.max_epochs, "lr": body.lr},
+        {
+            "max_epochs": body.max_epochs,
+            "lr": body.lr,
+            "train_size": body.train_size,
+            "val_size": body.val_size,
+            "batch_size": body.batch_size,
+            "seed": body.seed,
+            "dataset": body.dataset,
+            "dataset_path": body.dataset_path,
+            "dataset_url": body.dataset_url,
+            "image_size": body.image_size,
+        },
     )
     return _with_mcp_meta(data, "start_training")
 
@@ -141,10 +263,28 @@ async def advance(body: AdvanceBody | None = None) -> dict[str, Any]:
 
 @app.post("/inject-fault")
 async def inject_fault(body: FaultBody | None = None) -> dict[str, Any]:
+    """Arm a fault only — n8n decides when to train the broken epoch."""
     body = body or FaultBody()
-    await call_tool("inject_fault", {"kind": body.kind})
-    data = await call_tool("advance_epochs", {"n": 3})
-    return _with_mcp_meta(data, "inject_fault+advance_epochs")
+    data = await call_tool("inject_fault", {"kind": body.kind})
+    return _with_mcp_meta(data, "inject_fault")
+
+
+@app.get("/metrics")
+async def metrics(limit: int = 5) -> dict[str, Any]:
+    data = await call_tool("get_latest_metrics", {"limit": limit})
+    return _with_mcp_meta(data, "get_latest_metrics")
+
+
+@app.get("/checkpoints")
+async def checkpoints() -> dict[str, Any]:
+    data = await call_tool("list_checkpoints")
+    return _with_mcp_meta(data, "list_checkpoints")
+
+
+@app.get("/compare")
+async def compare() -> dict[str, Any]:
+    data = await call_tool("compare_recovery")
+    return _with_mcp_meta(data, "compare_recovery")
 
 
 @app.post("/analyze")
@@ -167,7 +307,10 @@ async def analyze_and_apply() -> dict[str, Any]:
     """n8n path: Gemini calls MCP tools (or legacy/heuristic fallback)."""
     status_data = await call_tool("get_training_status")
     if not status_data.get("metrics"):
-        await call_tool("start_training", {"max_epochs": 12, "lr": 0.01})
+        await call_tool(
+            "start_training",
+            {"max_epochs": 6, "lr": 0.01, "train_size": 2000, "val_size": 1000},
+        )
         await call_tool("advance_epochs", {"n": 2})
         status_data = await call_tool("get_training_status")
 

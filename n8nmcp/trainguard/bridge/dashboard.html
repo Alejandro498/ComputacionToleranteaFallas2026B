@@ -30,11 +30,11 @@
         radial-gradient(700px 400px at 100% 0%, #1c2a18 0%, transparent 50%),
         var(--bg);
     }
-    .wrap { max-width: 980px; margin: 0 auto; padding: 28px 20px 48px; }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 20px 48px; }
     header {
       display: flex; flex-wrap: wrap; gap: 16px;
       align-items: end; justify-content: space-between;
-      margin-bottom: 28px;
+      margin-bottom: 22px;
     }
     h1 {
       font-family: Syne, sans-serif;
@@ -44,7 +44,7 @@
       margin: 0 0 6px;
       line-height: 1;
     }
-    .sub { color: var(--muted); font-size: 0.9rem; max-width: 42ch; }
+    .sub { color: var(--muted); font-size: 0.9rem; max-width: 48ch; }
     .pulse {
       display: inline-flex; align-items: center; gap: 8px;
       border: 1px solid var(--line); background: var(--panel);
@@ -60,34 +60,81 @@
       70% { box-shadow: 0 0 0 12px rgba(61,255,154,0); }
       100% { box-shadow: 0 0 0 0 rgba(61,255,154,0); }
     }
+    .launch {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: end;
+      margin-bottom: 18px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+    }
+    @media (max-width: 720px) { .launch { grid-template-columns: 1fr; } }
+    label { display: block; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    input, select {
+      width: 100%;
+      background: #0d1813;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 720px) { .fields { grid-template-columns: 1fr; } }
+    .go {
+      min-width: 180px;
+      height: 74px;
+      border: 0;
+      border-radius: 16px;
+      background: var(--accent);
+      color: #07110c;
+      font-family: Syne, sans-serif;
+      font-weight: 800;
+      font-size: 1.15rem;
+      cursor: pointer;
+    }
+    .go:disabled { opacity: 0.55; cursor: wait; }
+    .go:hover:not(:disabled) { filter: brightness(1.08); }
+    .hint { color: var(--muted); font-size: 0.75rem; margin-top: 8px; }
+    .hint.err { color: var(--bad); }
+    .hint.ok { color: var(--accent); }
+    details.settings { margin-bottom: 18px; color: var(--muted); font-size: 0.8rem; }
+    details.settings summary { cursor: pointer; margin-bottom: 10px; }
     .grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px;
-      margin-bottom: 22px;
+      margin-bottom: 16px;
     }
-    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr 1fr; } }
     .stat {
       background: linear-gradient(180deg, #15261d, var(--panel));
       border: 1px solid var(--line);
       border-radius: 16px;
-      padding: 16px;
+      padding: 14px;
     }
-    .stat .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
-    .stat .value { font-family: Syne, sans-serif; font-size: 1.8rem; font-weight: 700; margin-top: 8px; }
-    .flow {
-      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-      margin: 0 0 22px; padding: 14px; border: 1px dashed var(--line); border-radius: 14px;
-      color: var(--muted); font-size: 0.82rem;
+    .stat .label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
+    .stat .value { font-family: Syne, sans-serif; font-size: 1.35rem; font-weight: 700; margin-top: 8px; word-break: break-word; }
+    .steps {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin: 0 0 16px; padding: 12px; border: 1px dashed var(--line); border-radius: 14px;
     }
-    .flow b { color: var(--accent); font-weight: 600; }
-    .arrow { opacity: 0.5; }
+    .step {
+      padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line);
+      color: var(--muted); font-size: 0.75rem;
+    }
+    .step.on { color: var(--accent); border-color: rgba(61,255,154,.4); }
+    .step.done { color: var(--warn); border-color: rgba(255,200,87,.35); }
+    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    @media (max-width: 860px) { .panels { grid-template-columns: 1fr; } }
     .feed {
       border: 1px solid var(--line);
       border-radius: 18px;
       overflow: hidden;
       background: rgba(10, 18, 14, 0.7);
-      backdrop-filter: blur(6px);
     }
     .feed-head {
       display: flex; justify-content: space-between; align-items: center;
@@ -100,35 +147,84 @@
       border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.75rem; cursor: pointer;
     }
     .btn:hover { border-color: var(--accent); color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
     .event {
       display: grid;
       grid-template-columns: 78px 1fr auto;
       gap: 12px;
-      padding: 14px 16px;
+      padding: 12px 16px;
       border-bottom: 1px solid var(--line);
-      animation: slideIn 0.35s ease;
-    }
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(-8px); }
-      to { opacity: 1; transform: none; }
     }
     .event:last-child { border-bottom: 0; }
-    .time { color: var(--muted); font-size: 0.8rem; padding-top: 4px; }
-    .tool {
-      font-family: Syne, sans-serif; font-weight: 700; font-size: 1.05rem;
-      color: var(--accent);
-    }
-    .meta { color: var(--muted); font-size: 0.78rem; margin-top: 4px; }
+    .time { color: var(--muted); font-size: 0.78rem; padding-top: 4px; }
+    .tool { font-family: Syne, sans-serif; font-weight: 700; color: var(--accent); }
+    .meta { color: var(--muted); font-size: 0.75rem; margin-top: 4px; }
     .badge {
       align-self: start;
       padding: 4px 10px; border-radius: 999px;
       background: var(--chip); border: 1px solid var(--line);
-      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+      font-size: 0.7rem; text-transform: uppercase;
     }
     .badge.ok { color: var(--accent); border-color: rgba(61,255,154,.35); }
     .badge.fail { color: var(--bad); border-color: rgba(255,93,108,.4); }
-    .empty { padding: 36px 16px; text-align: center; color: var(--muted); }
+    .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
     code { color: var(--warn); }
+    .recovery { padding: 14px 16px; font-size: 0.82rem; line-height: 1.5; }
+    .roles {
+      display: grid;
+      grid-template-columns: 1.1fr auto 1.1fr auto 1.2fr;
+      gap: 8px;
+      align-items: stretch;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 860px) { .roles { grid-template-columns: 1fr; } .roles .arrow { display: none; } }
+    .role {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: var(--panel);
+    }
+    .role .who { font-family: Syne, sans-serif; font-weight: 800; font-size: 1.15rem; }
+    .role .job { color: var(--muted); font-size: 0.78rem; margin-top: 6px; line-height: 1.45; }
+    .role.n8n { border-color: rgba(255, 200, 87, .45); }
+    .role.n8n .who { color: var(--warn); }
+    .role.mcp { border-color: rgba(61, 255, 154, .45); }
+    .role.mcp .who { color: var(--accent); }
+    .role.bridge .who { color: #9ecbff; }
+    .roles .arrow {
+      align-self: center; color: var(--muted); font-family: Syne, sans-serif; font-size: 1.4rem;
+    }
+    .pipe {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 860px) { .pipe { grid-template-columns: 1fr 1fr 1fr; } }
+    .pipe .step {
+      display: flex; flex-direction: column; gap: 4px;
+      padding: 10px 10px 12px;
+      border-radius: 14px;
+      background: #0d1813;
+    }
+    .pipe .step .n8n { color: var(--warn); font-size: 0.72rem; font-family: Syne, sans-serif; font-weight: 700; }
+    .pipe .step .mcp { color: var(--muted); font-size: 0.68rem; }
+    .pipe .step.on { border-color: rgba(61,255,154,.55); background: #13261c; }
+    .pipe .step.on .mcp { color: var(--accent); }
+    .chart-wrap { padding: 8px 12px 0; }
+    .chart-wrap svg { width: 100%; height: 150px; display: block; }
+    .verdict {
+      font-family: Syne, sans-serif;
+      font-weight: 800;
+      font-size: 1.6rem;
+      letter-spacing: -0.03em;
+      margin-bottom: 6px;
+    }
+    .verdict.good { color: var(--accent); }
+    .verdict.bad { color: var(--bad); }
+    .delta { font-family: Syne, sans-serif; font-size: 1.05rem; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -136,22 +232,88 @@
     <header>
       <div>
         <h1>TrainGuard MCP</h1>
-        <p class="sub">Monitor en vivo: cada llamada de n8n al bridge aparece aquí como tool MCP.</p>
+        <p class="sub">n8n decide el orden. MCP ejecuta el entrenamiento. Esta pantalla muestra las dos cosas a la vez.</p>
       </div>
-      <div class="pulse"><span class="dot"></span> LIVE · auto-refresh 1.5s</div>
+      <div class="pulse"><span class="dot"></span> <span id="pulse-label">LIVE</span></div>
     </header>
 
-    <div class="flow">
-      <b>n8n</b> <span class="arrow">→</span>
-      <b>Bridge HTTP</b> <span class="arrow">→</span>
-      <b>MCP Client</b> <span class="arrow">→</span>
-      <b>TrainGuard tools</b>
+    <div class="launch">
+      <div>
+        <div class="fields">
+          <div>
+            <label for="dataset">Dataset</label>
+            <select id="dataset">
+              <option value="auto">auto</option>
+              <option value="mnist">mnist</option>
+              <option value="fashion_mnist">fashion_mnist</option>
+              <option value="cifar10">cifar10</option>
+              <option value="custom">custom</option>
+            </select>
+          </div>
+          <div>
+            <label for="kind">Falla</label>
+            <select id="kind">
+              <option value="nan_loss">nan_loss</option>
+              <option value="exploding_lr">exploding_lr</option>
+              <option value="stall">stall</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint" id="hint">n8n debe estar en Listen for test event (o usar la URL Production).</p>
+      </div>
+      <button class="go" id="start">Iniciar</button>
     </div>
 
+    <details class="settings">
+      <summary>URLs (webhook n8n y ngrok)</summary>
+      <div class="fields">
+        <div>
+          <label for="webhook">Webhook n8n</label>
+          <input id="webhook" placeholder="https://….app.n8n.cloud/webhook-test/trainguard" />
+        </div>
+        <div>
+          <label for="bridge">Bridge público (ngrok)</label>
+          <input id="bridge" placeholder="https://….ngrok-free.dev" />
+        </div>
+      </div>
+    </details>
+
+    <div class="roles">
+      <div class="role n8n">
+        <div class="who">n8n</div>
+        <div class="job">Orquesta. El webhook elige dataset y falla, y llama al bridge nodo por nodo. No entrena.</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="role bridge">
+        <div class="who">Bridge</div>
+        <div class="job">Traduce cada HTTP de n8n a una llamada MCP. Gemini decide aquí, también por tools.</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="role mcp">
+        <div class="who">MCP</div>
+        <div class="job">Ejecuta: entrena MNIST, guarda <code>.pt</code>, rompe el run y carga <code>best.pt</code>.</div>
+      </div>
+    </div>
+
+    <div class="pipe" id="steps"></div>
+
     <div class="grid">
-      <div class="stat"><div class="label">MCP calls</div><div class="value" id="count">0</div></div>
-      <div class="stat"><div class="label">Última tool</div><div class="value" id="last" style="font-size:1.1rem">—</div></div>
-      <div class="stat"><div class="label">Estado</div><div class="value" id="state" style="font-size:1.1rem;color:var(--accent)">waiting</div></div>
+      <div class="stat"><div class="label">Dataset</div><div class="value" id="ds">—</div></div>
+      <div class="stat"><div class="label">Run / época</div><div class="value" id="run">—</div></div>
+      <div class="stat"><div class="label">Best acc</div><div class="value" id="acc">—</div></div>
+      <div class="stat"><div class="label">Falla / acción</div><div class="value" id="act" style="font-size:1rem">—</div></div>
+    </div>
+
+    <div class="panels">
+      <section class="feed">
+        <div class="feed-head"><span>Accuracy por época</span></div>
+        <div class="chart-wrap" id="chart"></div>
+        <div id="metrics"><div class="empty">Aún no hay épocas.</div></div>
+      </section>
+      <section class="feed">
+        <div class="feed-head"><span>Recuperación</span></div>
+        <div class="recovery" id="recovery">Esperando compare_recovery…</div>
+      </section>
     </div>
 
     <section class="feed">
@@ -159,63 +321,243 @@
         <span>MCP tool feed</span>
         <button class="btn" id="clear">Clear</button>
       </div>
-      <div id="events"><div class="empty">Esperando llamadas… dispara el webhook de n8n.</div></div>
+      <div id="events"><div class="empty">Pulsa Iniciar para mandar el webhook.</div></div>
     </section>
   </div>
 
   <script>
-    const eventsEl = document.getElementById("events");
-    const countEl = document.getElementById("count");
-    const lastEl = document.getElementById("last");
-    const stateEl = document.getElementById("state");
-    let seen = new Set();
+    const KEYS = { webhook: "tg_webhook", bridge: "tg_bridge", dataset: "tg_dataset", kind: "tg_kind" };
+    const STEPS = [
+      { id: "list_datasets", n8n: "List Datasets", mcp: "list_datasets" },
+      { id: "start_training", n8n: "Start Training", mcp: "start_training" },
+      { id: "advance_epochs", n8n: "Train / Resume", mcp: "advance_epochs" },
+      { id: "inject_fault", n8n: "Inject Fault", mcp: "inject_fault" },
+      { id: "apply_recovery_action", n8n: "Analyze · Gemini", mcp: "apply_recovery_action" },
+      { id: "compare_recovery", n8n: "Compare", mcp: "compare_recovery" },
+    ];
+    const N8N_BY_PATH = {
+      "/datasets": "List Datasets",
+      "/start": "Start Training",
+      "/advance": "Train / Resume",
+      "/inject-fault": "Inject Fault",
+      "/metrics": "Get Metrics",
+      "/checkpoints": "List Checkpoints",
+      "/analyze-and-apply": "Analyze and Apply",
+      "/compare": "Compare Recovery",
+      "/status": "Status",
+    };
+    const els = {
+      dataset: document.getElementById("dataset"),
+      kind: document.getElementById("kind"),
+      webhook: document.getElementById("webhook"),
+      bridge: document.getElementById("bridge"),
+      start: document.getElementById("start"),
+      hint: document.getElementById("hint"),
+      steps: document.getElementById("steps"),
+      ds: document.getElementById("ds"),
+      run: document.getElementById("run"),
+      acc: document.getElementById("acc"),
+      act: document.getElementById("act"),
+      chart: document.getElementById("chart"),
+      metrics: document.getElementById("metrics"),
+      recovery: document.getElementById("recovery"),
+      events: document.getElementById("events"),
+      pulse: document.getElementById("pulse-label"),
+    };
+    let running = false;
 
-    function render(events) {
-      countEl.textContent = String(events.length);
+    function save() {
+      localStorage.setItem(KEYS.webhook, els.webhook.value.trim());
+      localStorage.setItem(KEYS.bridge, els.bridge.value.trim());
+      localStorage.setItem(KEYS.dataset, els.dataset.value);
+      localStorage.setItem(KEYS.kind, els.kind.value);
+    }
+
+    function n8nName(source) {
+      const path = String(source || "").split(":").pop() || "";
+      return N8N_BY_PATH[path] || path || "n8n";
+    }
+
+    function renderSteps(events) {
+      const tools = new Set((events || []).map((e) => e.tool));
+      const latest = events && events[0] ? events[0].tool : "";
+      els.steps.innerHTML = STEPS.map((s) => {
+        const on = tools.has(s.id);
+        const hot = latest === s.id;
+        return `<div class="step ${on ? "on" : ""} ${hot ? "done" : ""}">
+          <span class="n8n">${s.n8n}</span>
+          <span class="mcp">${on ? "MCP · " : ""}${s.mcp}</span>
+        </div>`;
+      }).join("");
+    }
+
+    function renderEvents(events) {
       if (!events.length) {
-        eventsEl.innerHTML = '<div class="empty">Esperando llamadas… dispara el webhook de n8n.</div>';
-        lastEl.textContent = "—";
-        stateEl.textContent = "waiting";
+        els.events.innerHTML = '<div class="empty">Pulsa Iniciar. n8n llamará al bridge y cada fila será una tool MCP.</div>';
         return;
       }
-      lastEl.textContent = events[0].tool;
-      stateEl.textContent = events[0].ok ? "MCP OK" : "MCP FAIL";
-      stateEl.style.color = events[0].ok ? "var(--accent)" : "var(--bad)";
-      eventsEl.innerHTML = events.map((e) => {
-        const args = e.arguments && Object.keys(e.arguments).length
-          ? JSON.stringify(e.arguments)
-          : "{}";
-        return `
-          <article class="event">
-            <div class="time">${e.ts}<br/>${e.elapsed_ms || 0}ms</div>
-            <div>
-              <div class="tool">${e.tool}</div>
-              <div class="meta">protocol=<code>MCP</code> · source=<code>${e.source || "?"}</code> · args=${args}</div>
-            </div>
-            <div class="badge ${e.ok ? "ok" : "fail"}">${e.ok ? "OK" : "FAIL"}</div>
-          </article>`;
+      els.events.innerHTML = events.map((e) => {
+        const args = e.arguments && Object.keys(e.arguments).length ? JSON.stringify(e.arguments) : "{}";
+        return `<article class="event">
+          <div class="time">${e.ts}<br/>${e.elapsed_ms || 0}ms</div>
+          <div>
+            <div class="tool">${e.tool}</div>
+            <div class="meta">n8n · <code>${n8nName(e.source)}</code> → MCP · <code>${e.tool}</code> · ${args}</div>
+          </div>
+          <div class="badge ${e.ok ? "ok" : "fail"}">${e.ok ? "OK" : "FAIL"}</div>
+        </article>`;
       }).join("");
+    }
+
+    function renderChart(rows) {
+      if (!rows.length) {
+        els.chart.innerHTML = "";
+        return;
+      }
+      const w = 560, h = 150, padL = 28, padR = 8, padT = 16, padB = 22;
+      const innerW = w - padL - padR;
+      const innerH = h - padT - padB;
+      const n = rows.length;
+      const slot = innerW / n;
+      const bars = rows.map((m, i) => {
+        const broken = m.loss_raw === "NaN" || m.healthy === false;
+        const acc = broken ? 0 : Math.max(0, Math.min(1, Number(m.accuracy) || 0));
+        const bh = Math.max(broken ? 8 : 4, acc * innerH);
+        const x = padL + i * slot + slot * 0.18;
+        const bw = slot * 0.64;
+        const y = padT + innerH - bh;
+        const color = broken ? "#ff5d6c" : (m.note === "restored_from_checkpoint" ? "#ffc857" : "#3dff9a");
+        const label = broken ? "NaN" : String(m.accuracy);
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="4" fill="${color}"></rect>
+          <text x="${(x + bw / 2).toFixed(1)}" y="${(h - 6).toFixed(1)}" text-anchor="middle" fill="#8aa394" font-size="10">e${m.epoch}</text>
+          <text x="${(x + bw / 2).toFixed(1)}" y="${Math.max(12, y - 4).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="10">${label}</text>`;
+      }).join("");
+      els.chart.innerHTML = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Accuracy por época">${bars}</svg>`;
+    }
+
+    function renderLive(live) {
+      const ds = live.dataset || {};
+      els.ds.textContent = ds.name || ds.id || "—";
+      els.run.textContent = live.run_id ? `${live.run_id} · e${live.epoch ?? 0}` : "—";
+      els.acc.textContent = live.best_acc == null ? "—" : String(live.best_acc);
+      const action = (live.last_action && live.last_action.action) || live.fault || live.status || "—";
+      els.act.textContent = action;
+      const rows = live.metrics || [];
+      renderChart(rows);
+      if (!rows.length) {
+        els.metrics.innerHTML = '<div class="empty">Aún no hay épocas. La barra verde es sana, la roja es la falla y la ámbar es el rollback.</div>';
+      } else {
+        els.metrics.innerHTML = `<table><thead><tr><th>e</th><th>val_loss</th><th>val_acc</th><th>ok</th></tr></thead><tbody>${
+          rows.map((m) => `<tr><td>${m.epoch}${m.note === "restored_from_checkpoint" ? " · rollback" : ""}</td><td>${m.loss_raw}</td><td>${m.accuracy}</td><td>${m.healthy ? "sí" : "no"}</td></tr>`).join("")
+        }</tbody></table>`;
+      }
+      const rec = live.recovery;
+      if (!rec) {
+        els.recovery.textContent = live.last_action
+          ? `Última acción MCP: ${live.last_action.action || "—"}. n8n aún no llama a Compare.`
+          : "Cuando n8n llegue a Compare Recovery, aquí se ve si se conservó el mejor resultado.";
+      } else {
+        const ok = rec.recovery_success === true;
+        els.recovery.innerHTML = `
+          <div class="verdict ${ok ? "good" : "bad"}">${ok ? "Se conservó el mejor" : "No se conservó"}</div>
+          <div class="delta">${rec.best_acc_before} → ${rec.best_acc_after} <span style="color:#8aa394">Δ ${rec.best_acc_delta}</span></div>
+          resumed=<code>${rec.resumed}</code> · sano=<code>${rec.latest_healthy}</code>`;
+        if (rec.recovery_success === true || rec.recovery_success === false) {
+          running = false;
+          els.start.disabled = false;
+          els.start.textContent = "Iniciar";
+          els.pulse.textContent = rec.recovery_success ? "DONE · success" : "DONE";
+        }
+      }
     }
 
     async function tick() {
       try {
-        const res = await fetch("/mcp-events");
-        const data = await res.json();
-        render(data.events || []);
+        const [evRes, liveRes] = await Promise.all([fetch("/mcp-events"), fetch("/live")]);
+        const evData = await evRes.json();
+        const live = await liveRes.json();
+        const events = evData.events || [];
+        renderEvents(events);
+        renderSteps(events);
+        renderLive(live);
+        if (running) els.pulse.textContent = "RUNNING";
       } catch (err) {
-        stateEl.textContent = "offline";
-        stateEl.style.color = "var(--bad)";
+        els.hint.textContent = "Bridge offline";
+        els.hint.className = "hint err";
       }
+    }
+
+    async function startRun() {
+      save();
+      const webhook = els.webhook.value.trim();
+      const bridge = els.bridge.value.trim();
+      if (!webhook || !bridge) {
+        els.hint.textContent = "Faltan el webhook de n8n o la URL de ngrok (ábrelo en URLs).";
+        els.hint.className = "hint err";
+        document.querySelector(".settings").open = true;
+        return;
+      }
+      els.start.disabled = true;
+      els.start.textContent = "En curso…";
+      els.hint.textContent = "Webhook enviado. n8n orquesta; aquí se pintan las tools MCP.";
+      els.hint.className = "hint ok";
+      running = true;
+      await fetch("/mcp-events/clear", { method: "POST" });
+      const res = await fetch("/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          webhook_url: webhook,
+          bridge_base_url: bridge,
+          dataset: els.dataset.value,
+          kind: els.kind.value,
+          mode: "demo",
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        running = false;
+        els.start.disabled = false;
+        els.start.textContent = "Iniciar";
+        els.hint.textContent = data.error || "No se pudo disparar n8n";
+        els.hint.className = "hint err";
+      }
+      tick();
     }
 
     document.getElementById("clear").addEventListener("click", async () => {
       await fetch("/mcp-events/clear", { method: "POST" });
-      seen.clear();
       tick();
     });
+    els.start.addEventListener("click", startRun);
+    ["webhook", "bridge", "dataset", "kind"].forEach((id) => {
+      document.getElementById(id).addEventListener("change", save);
+    });
 
-    tick();
-    setInterval(tick, 1500);
+    (async function init() {
+      els.webhook.value = localStorage.getItem(KEYS.webhook) || "";
+      els.bridge.value = localStorage.getItem(KEYS.bridge) || "";
+      els.dataset.value = localStorage.getItem(KEYS.dataset) || "fashion_mnist";
+      els.kind.value = localStorage.getItem(KEYS.kind) || "nan_loss";
+      try {
+        const cfg = await (await fetch("/config")).json();
+        if (!els.webhook.value && cfg.n8n_webhook_url) els.webhook.value = cfg.n8n_webhook_url;
+        if (!els.bridge.value && cfg.bridge_public_url) els.bridge.value = cfg.bridge_public_url;
+        const extras = ((cfg.datasets || {}).custom || []).map((d) => d.id);
+        extras.forEach((id) => {
+          if (![...els.dataset.options].some((o) => o.value === id)) {
+            const opt = document.createElement("option");
+            opt.value = id;
+            opt.textContent = id;
+            els.dataset.appendChild(opt);
+          }
+        });
+        save();
+      } catch (e) {}
+      renderSteps([]);
+      tick();
+      setInterval(tick, 1500);
+    })();
   </script>
 </body>
 </html>

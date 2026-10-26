@@ -3,5 +3,6 @@ __pycache__/
 *.pyc
 .env
 runs/
+data/
 *.pt
 .pytest_cache/

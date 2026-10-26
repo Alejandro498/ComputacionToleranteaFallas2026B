@@ -10,6 +10,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNS_DIR = ROOT / "runs"
+DATA_DIR = ROOT / "data"
 STATE_FILE = RUNS_DIR / "current_run.json"
 _LOCK = threading.RLock()
 
@@ -19,13 +20,19 @@ def _default_state() -> dict[str, Any]:
         "run_id": None,
         "status": "idle",
         "epoch": 0,
-        "max_epochs": 12,
+        "max_epochs": 6,
         "lr": 0.01,
         "best_loss": None,
+        "best_acc": None,
+        "best_checkpoint": None,
         "metrics": [],
         "checkpoints": [],
         "fault": None,
         "last_action": None,
+        "dataset": None,
+        "trainer": None,
+        "snapshot_before_fault": None,
+        "recovery_report": None,
         "history": [],
         "updated_at": None,
     }

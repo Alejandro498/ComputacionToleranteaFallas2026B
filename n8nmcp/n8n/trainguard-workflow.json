@@ -1,5 +1,5 @@
 {
-  "name": "TrainGuard — NN Fault Recovery",
+  "name": "TrainGuard — Fault Recovery",
   "nodes": [
     {
       "parameters": {
@@ -12,18 +12,43 @@
       "name": "Webhook TrainGuard",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [0, 0],
+      "position": [0, 200],
       "webhookId": "trainguard-demo"
     },
     {
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\nconst mode = body.mode || 'demo';\nconst kind = body.kind || 'nan_loss';\nconst bridge = body.bridge_base_url || 'https://REPLACE_WITH_NGROK.ngrok-free.app';\n\nreturn [{\n  json: {\n    mode,\n    kind,\n    bridge_base_url: bridge.replace(/\\/$/, ''),\n    requested_at: new Date().toISOString()\n  }\n}];"
+        "jsCode": "const body = $json.body ?? $json;\nconst mode = body.mode || 'demo';\nconst kind = body.kind || 'nan_loss';\nconst bridge = body.bridge_base_url || 'https://REPLACE_WITH_NGROK.ngrok-free.app';\n\nreturn [{\n  json: {\n    mode,\n    kind,\n    dataset: String(body.dataset || 'auto').toLowerCase(),\n    dataset_path: String(body.dataset_path || ''),\n    dataset_url: String(body.dataset_url || ''),\n    image_size: Number(body.image_size || 0),\n    healthy_epochs: Number(body.healthy_epochs || 2),\n    broken_epochs: Number(body.broken_epochs || 1),\n    resume_epochs: Number(body.resume_epochs || 2),\n    train_size: Number(body.train_size || 2000),\n    val_size: Number(body.val_size || 1000),\n    batch_size: Number(body.batch_size || 64),\n    max_epochs: Number(body.max_epochs || 6),\n    lr: Number(body.lr || 0.01),\n    seed: Number(body.seed || 42),\n    bridge_base_url: String(bridge).replace(/\\/$/, ''),\n    requested_at: new Date().toISOString()\n  }\n}];"
       },
       "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
       "name": "Normalize Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [240, 0]
+      "position": [240, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.bridge_base_url }}/datasets",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "a9b0c1d2-e3f4-5678-9012-34567890abcd",
+      "name": "List Datasets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Normalize Input').item.json;\nconst catalog = $json || {};\nconst custom = catalog.custom || [];\nlet dataset = String(input.dataset || 'auto').toLowerCase().trim();\nlet dataset_path = input.dataset_path || '';\nlet dataset_url = input.dataset_url || '';\nlet resolved_how = 'explicit';\n\nif (dataset === 'auto') {\n  if (dataset_url) {\n    dataset = 'custom';\n    resolved_how = 'url';\n  } else if (dataset_path) {\n    dataset = 'custom';\n    resolved_how = 'path';\n  } else if (custom.length) {\n    dataset = 'custom';\n    dataset_path = custom[0].path;\n    resolved_how = 'first_custom_folder';\n  } else {\n    dataset = 'mnist';\n    resolved_how = 'default_mnist';\n  }\n}\n\nreturn [{\n  json: {\n    ...input,\n    dataset,\n    dataset_path,\n    dataset_url,\n    resolved_how,\n    catalog_ids: (catalog.datasets || []).map(d => d.id)\n  }\n}];"
+      },
+      "id": "b0c1d2e3-f4a5-6789-0123-4567890abcde",
+      "name": "Resolve Dataset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 200]
     },
     {
       "parameters": {
@@ -111,7 +136,7 @@
       "name": "Route by Mode",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [480, 0]
+      "position": [960, 200]
     },
     {
       "parameters": {
@@ -119,47 +144,44 @@
         "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/start",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={ \"max_epochs\": 12, \"lr\": 0.01 }",
+        "jsonBody": "={\n  \"max_epochs\": {{ $('Resolve Dataset').item.json.max_epochs }},\n  \"lr\": {{ $('Resolve Dataset').item.json.lr }},\n  \"train_size\": {{ $('Resolve Dataset').item.json.train_size }},\n  \"val_size\": {{ $('Resolve Dataset').item.json.val_size }},\n  \"batch_size\": {{ $('Resolve Dataset').item.json.batch_size }},\n  \"seed\": {{ $('Resolve Dataset').item.json.seed }},\n  \"dataset\": \"{{ $('Resolve Dataset').item.json.dataset }}\",\n  \"dataset_path\": \"{{ $('Resolve Dataset').item.json.dataset_path }}\",\n  \"dataset_url\": \"{{ $('Resolve Dataset').item.json.dataset_url }}\",\n  \"image_size\": {{ $('Resolve Dataset').item.json.image_size }}\n}",
         "options": {
-          "timeout": 30000
+          "timeout": 180000
         }
       },
       "id": "d4e5f6a7-b8c9-0123-def0-234567890123",
       "name": "Start Training",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [740, -160]
+      "position": [740, 0]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/inject-fault",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/advance",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"kind\": \"{{ $('Normalize Input').item.json.kind }}\"\n}",
+        "jsonBody": "={\n  \"n\": {{ $('Normalize Input').item.json.healthy_epochs }}\n}",
         "options": {
-          "timeout": 30000
+          "timeout": 180000
         }
       },
-      "id": "e5f6a7b8-c9d0-1234-ef01-345678901234",
-      "name": "Inject Fault",
+      "id": "e4f5a6b7-c8d9-0123-ef01-345678901234",
+      "name": "Train Healthy",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [980, -160]
+      "position": [980, 0]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/analyze-and-apply",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "{}",
+        "method": "GET",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/status",
         "options": {
           "timeout": 30000
         }
       },
-      "id": "f6a7b8c9-d0e1-2345-f012-456789012345",
-      "name": "Analyze and Apply",
+      "id": "f5a6b7c8-d9e0-1234-f012-456789012345",
+      "name": "Snapshot Before",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1220, 0]
@@ -175,11 +197,138 @@
           "timeout": 30000
         }
       },
-      "id": "a7b8c9d0-e1f2-3456-0123-567890123456",
+      "id": "a6b7c8d9-e0f1-2345-0123-567890123456",
+      "name": "Inject Fault",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/advance",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"n\": {{ $('Normalize Input').item.json.broken_epochs }}\n}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "b7c8d9e0-f1a2-3456-1234-678901234567",
+      "name": "Train Broken",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1700, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/inject-fault",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"kind\": \"{{ $('Normalize Input').item.json.kind }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c8d9e0f1-a2b3-4567-2345-789012345678",
       "name": "Inject Fault Only",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [740, 200]
+      "position": [740, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/advance",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"n\": {{ $('Normalize Input').item.json.broken_epochs }}\n}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "d9e0f1a2-b3c4-5678-3456-890123456789",
+      "name": "Train Broken Only",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [980, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/metrics?limit=8",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e0f1a2b3-c4d5-6789-4567-901234567890",
+      "name": "Get Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1940, 80]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/checkpoints",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "f1a2b3c4-d5e6-7890-5678-012345678901",
+      "name": "List Checkpoints",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2180, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/analyze-and-apply",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "a2b3c4d5-e6f7-8901-6789-123456789012",
+      "name": "Analyze and Apply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2420, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/advance",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"n\": {{ $('Normalize Input').item.json.resume_epochs }}\n}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "b3c4d5e6-f7a8-9012-7890-234567890123",
+      "name": "Resume Training",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2660, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Normalize Input').item.json.bridge_base_url }}/compare",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c4d5e6f7-a8b9-0123-8901-345678901234",
+      "name": "Compare Recovery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2900, 200]
     },
     {
       "parameters": {
@@ -189,21 +338,21 @@
           "timeout": 30000
         }
       },
-      "id": "b8c9d0e1-f2a3-4567-1234-678901234567",
-      "name": "Get Status",
+      "id": "d5e6f7a8-b9c0-1234-9012-456789012345",
+      "name": "Final Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1460, 0]
+      "position": [3140, 200]
     },
     {
       "parameters": {
-        "jsCode": "const analyzed = $('Analyze and Apply').item.json;\nconst status = $json;\nconst decision = analyzed.decision || analyzed;\nconst mcpFromAnalyze = analyzed.mcp_tools_called || analyzed._meta?.mcp_tools_called || [];\nconst mcpFromStatus = status.mcp_tools_called || status._meta?.mcp_tools_called || [];\nconst tools = [...mcpFromAnalyze, ...mcpFromStatus].map(t => t.tool);\nconst uniqueTools = [...new Set(tools)];\nconst story = analyzed.mcp_story || `n8n → bridge → ${uniqueTools.map(t => 'MCP:' + t).join(' → ')}`;\n\nconst banner = [\n  '╔══════════════════════════════════════════╗',\n  '║     TRAINGUARD · LLAMADA VÍA MCP          ║',\n  '╠══════════════════════════════════════════╣',\n  `║ tools: ${uniqueTools.join(', ') || 'n/a'}`.padEnd(43, ' ') + '║',\n  `║ action: ${decision.action}`.padEnd(43, ' ') + '║',\n  '║ dashboard: http://127.0.0.1:8787/dashboard ║',\n  '╚══════════════════════════════════════════╝'\n].join('\\n');\n\nconst summary = {\n  project: 'TrainGuard',\n  mode: $('Normalize Input').item.json.mode,\n  called_via_mcp: true,\n  decided_by: decision.decided_by || analyzed.decision?.decided_by || 'unknown',\n  model: decision.model || analyzed.decision?.model || null,\n  mcp_banner: banner,\n  mcp_story: story,\n  mcp_dashboard: 'http://127.0.0.1:8787/dashboard',\n  mcp_integration: 'n8n -> bridge -> MCP Client -> TrainGuard tools (+ Gemini si USE_GEMINI)',\n  mcp_tools_from_analyze: mcpFromAnalyze,\n  mcp_tools_from_status: mcpFromStatus,\n  action: decision.action,\n  confidence: decision.confidence,\n  reason: decision.reason,\n  evidence: decision.evidence,\n  applied: analyzed.applied,\n  run_id: status.run_id || decision.run_id,\n  status: status.status,\n  epoch: status.epoch,\n  lr: status.lr,\n  fault: status.fault,\n  last_action: status.last_action,\n  message: `TrainGuard via ${decision.decided_by || 'MCP'}: ${decision.action} (conf=${decision.confidence}) — ${decision.reason}`\n};\n\nreturn [{ json: summary }];"
+        "jsCode": "function safe(name) {\n  try {\n    const node = $(name);\n    if (node.first) {\n      const item = node.first();\n      if (item && item.json && Object.keys(item.json).length) return item.json;\n    }\n  } catch (e) {}\n  try {\n    const all = $(name).all();\n    if (all && all.length && all[all.length - 1].json) return all[all.length - 1].json;\n  } catch (e) {}\n  try {\n    return $(name).item.json;\n  } catch (e) {}\n  return {};\n}\n\nconst incoming = ($input.first && $input.first().json) || $json || {};\nconst analyzed = safe('Analyze and Apply');\nconst status = Object.keys(safe('Final Status')).length ? safe('Final Status') : incoming;\nconst compare = Object.keys(safe('Compare Recovery')).length ? safe('Compare Recovery') : (status.recovery_report || {});\nconst snapshot = safe('Snapshot Before');\nconst metrics = safe('Get Metrics');\nconst checkpoints = safe('List Checkpoints');\nconst resolved = safe('Resolve Dataset');\nconst started = safe('Start Training');\nconst normalized = safe('Normalize Input');\nconst decision = analyzed.decision || {};\nconst mcpFromAnalyze = analyzed.mcp_tools_called || analyzed._meta?.mcp_tools_called || [];\nconst mcpFromStatus = status.mcp_tools_called || status._meta?.mcp_tools_called || [];\nconst mcpFromCompare = compare.mcp_tools_called || compare._meta?.mcp_tools_called || [];\nconst tools = [...mcpFromAnalyze, ...mcpFromStatus, ...mcpFromCompare].map(t => t.tool);\nconst uniqueTools = [...new Set(tools)];\nconst story = analyzed.mcp_story || status.mcp_story || `n8n → bridge → ${uniqueTools.map(t => 'MCP:' + t).join(' → ')}`;\nconst recoverySuccess = compare.recovery_success === true;\nconst datasetInfo = started.dataset || status.dataset || {\n  requested: resolved.dataset,\n  resolved_how: resolved.resolved_how,\n  path: resolved.dataset_path\n};\nconst datasetName = datasetInfo.name || datasetInfo.id || resolved.dataset || 'auto';\nconst banner = [\n  '╔══════════════════════════════════════════╗',\n  '║   TRAINGUARD · DATASET + MCP             ║',\n  '╠══════════════════════════════════════════╣',\n  `║ dataset: ${datasetName}`.padEnd(43, ' ') + '║',\n  `║ action: ${decision.action || status.last_action?.action}`.padEnd(43, ' ') + '║',\n  `║ recovery_success: ${recoverySuccess}`.padEnd(43, ' ') + '║',\n  '║ dashboard: http://127.0.0.1:8787/dashboard ║',\n  '╚══════════════════════════════════════════╝'\n].join('\\n');\n\nconst summary = {\n  project: 'TrainGuard',\n  dataset: datasetInfo,\n  trainer: 'pytorch_tiny_cnn',\n  mode: resolved.mode || normalized.mode,\n  kind: resolved.kind || normalized.kind,\n  called_via_mcp: true,\n  decided_by: decision.decided_by || 'unknown',\n  model: decision.model || null,\n  mcp_banner: banner,\n  mcp_story: story,\n  mcp_dashboard: 'http://127.0.0.1:8787/dashboard',\n  mcp_integration: 'n8n -> bridge -> MCP Client -> TrainGuard tools (+ Gemini si USE_GEMINI)',\n  mcp_tools_from_analyze: mcpFromAnalyze,\n  action: decision.action || (status.last_action && status.last_action.action),\n  confidence: decision.confidence,\n  reason: decision.reason || (status.last_action && status.last_action.reason),\n  evidence: decision.evidence,\n  applied: analyzed.applied,\n  snapshot_before_fault: snapshot.best_checkpoint || snapshot.snapshot_before_fault || compare.before || status.snapshot_before_fault,\n  recovery: {\n    best_acc_before: compare.best_acc_before,\n    best_acc_after: compare.best_acc_after,\n    best_acc_delta: compare.best_acc_delta,\n    preserved_best: compare.preserved_best,\n    resumed: compare.resumed,\n    latest_healthy: compare.latest_healthy,\n    recovery_success: compare.recovery_success,\n    best_sha256_at_fault: compare.best_sha256_at_fault,\n    best_sha256_now: compare.best_sha256_now\n  },\n  run_id: status.run_id || decision.run_id,\n  status: status.status,\n  epoch: status.epoch,\n  lr: status.lr,\n  fault: status.fault,\n  best_acc: status.best_acc,\n  best_loss: status.best_loss,\n  last_action: status.last_action,\n  latest_metrics: metrics.metrics || status.metrics,\n  checkpoints: checkpoints.checkpoints || status.checkpoints,\n  message: `TrainGuard ${datasetName} via ${decision.decided_by || 'MCP'}: ${decision.action || (status.last_action && status.last_action.action)} recovery_success=${compare.recovery_success} (best ${compare.best_acc_before} → ${compare.best_acc_after})`\n};\n\nreturn [{ json: summary }];"
       },
-      "id": "c9d0e1f2-a3b4-5678-2345-789012345678",
+      "id": "e6f7a8b9-c0d1-2345-0123-567890123456",
       "name": "Build Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1700, 0]
+      "position": [3380, 200]
     },
     {
       "parameters": {
@@ -213,145 +362,87 @@
           "responseCode": 200
         }
       },
-      "id": "d0e1f2a3-b4c5-6789-3456-890123456789",
+      "id": "f7a8b9c0-d1e2-3456-1234-678901234567",
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1940, 0]
+      "position": [3620, 200]
     },
     {
       "parameters": {
-        "content": "## TrainGuard\n1. Arranca el bridge local: `python -m trainguard.bridge.app`\n2. Expón con ngrok: `ngrok http 8787`\n3. En el body del webhook puedes enviar:\n```json\n{\n  \"mode\": \"demo\",\n  \"kind\": \"nan_loss\",\n  \"bridge_base_url\": \"https://TU-URL.ngrok-free.app\"\n}\n```\nModes: `demo` | `analyze` | `inject`\nFaults: `nan_loss` | `exploding_lr` | `stall`",
-        "height": 380,
-        "width": 420
+        "content": "## TrainGuard · n8n orquesta, MCP entrena\n1. Bridge: `python -m trainguard.bridge.app`\n2. Túnel: `ngrok http 8787`\n3. Webhook:\n```json\n{\n  \"mode\": \"demo\",\n  \"kind\": \"nan_loss\",\n  \"dataset\": \"auto\",\n  \"bridge_base_url\": \"https://TU-URL.ngrok-free.app\"\n}\n```\n`dataset`: `auto` | `mnist` | `fashion_mnist` | `cifar10` | `custom`\n`dataset_path`: `data/custom/mi_set`\n`dataset_url`: ZIP ImageFolder (http/s)\n\n`auto` usa la primera carpeta en `data/custom/` o MNIST.\nModes: `demo` | `analyze` | `inject`\nFaults: `nan_loss` | `exploding_lr` | `stall`",
+        "height": 460,
+        "width": 440
       },
-      "id": "e1f2a3b4-c5d6-7890-4567-901234567890",
+      "id": "a8b9c0d1-e2f3-4567-2345-789012345678",
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-420, -120]
+      "position": [-480, 0]
     }
   ],
   "connections": {
     "Webhook TrainGuard": {
-      "main": [
-        [
-          {
-            "node": "Normalize Input",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]]
     },
     "Normalize Input": {
-      "main": [
-        [
-          {
-            "node": "Route by Mode",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "List Datasets", "type": "main", "index": 0 }]]
+    },
+    "List Datasets": {
+      "main": [[{ "node": "Resolve Dataset", "type": "main", "index": 0 }]]
+    },
+    "Resolve Dataset": {
+      "main": [[{ "node": "Route by Mode", "type": "main", "index": 0 }]]
     },
     "Route by Mode": {
       "main": [
-        [
-          {
-            "node": "Start Training",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Analyze and Apply",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Inject Fault Only",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Analyze and Apply",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Start Training", "type": "main", "index": 0 }],
+        [{ "node": "Analyze and Apply", "type": "main", "index": 0 }],
+        [{ "node": "Inject Fault Only", "type": "main", "index": 0 }],
+        [{ "node": "Analyze and Apply", "type": "main", "index": 0 }]
       ]
     },
     "Start Training": {
-      "main": [
-        [
-          {
-            "node": "Inject Fault",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Train Healthy", "type": "main", "index": 0 }]]
+    },
+    "Train Healthy": {
+      "main": [[{ "node": "Snapshot Before", "type": "main", "index": 0 }]]
+    },
+    "Snapshot Before": {
+      "main": [[{ "node": "Inject Fault", "type": "main", "index": 0 }]]
     },
     "Inject Fault": {
-      "main": [
-        [
-          {
-            "node": "Analyze and Apply",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Train Broken", "type": "main", "index": 0 }]]
+    },
+    "Train Broken": {
+      "main": [[{ "node": "Get Metrics", "type": "main", "index": 0 }]]
     },
     "Inject Fault Only": {
-      "main": [
-        [
-          {
-            "node": "Analyze and Apply",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Train Broken Only", "type": "main", "index": 0 }]]
+    },
+    "Train Broken Only": {
+      "main": [[{ "node": "Get Metrics", "type": "main", "index": 0 }]]
+    },
+    "Get Metrics": {
+      "main": [[{ "node": "List Checkpoints", "type": "main", "index": 0 }]]
+    },
+    "List Checkpoints": {
+      "main": [[{ "node": "Analyze and Apply", "type": "main", "index": 0 }]]
     },
     "Analyze and Apply": {
-      "main": [
-        [
-          {
-            "node": "Get Status",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Resume Training", "type": "main", "index": 0 }]]
     },
-    "Get Status": {
-      "main": [
-        [
-          {
-            "node": "Build Summary",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Resume Training": {
+      "main": [[{ "node": "Compare Recovery", "type": "main", "index": 0 }]]
+    },
+    "Compare Recovery": {
+      "main": [[{ "node": "Final Status", "type": "main", "index": 0 }]]
+    },
+    "Final Status": {
+      "main": [[{ "node": "Build Summary", "type": "main", "index": 0 }]]
     },
     "Build Summary": {
-      "main": [
-        [
-          {
-            "node": "Respond to Webhook",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
     }
   },
   "pinData": {},
@@ -360,12 +451,10 @@
   },
   "staticData": null,
   "tags": [
-    {
-      "name": "TrainGuard"
-    },
-    {
-      "name": "MCP"
-    }
+    { "name": "TrainGuard" },
+    { "name": "MCP" },
+    { "name": "MNIST" },
+    { "name": "Datasets" }
   ],
   "meta": {
     "templateCredsSetupCompleted": true

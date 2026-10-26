@@ -108,8 +108,8 @@ def decide_with_gemini(context: dict[str, Any]) -> dict[str, Any]:
     model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
     client = genai.Client(api_key=api_key)
 
-    prompt = f"""Eres el agente de tolerancia a fallas de TrainGuard (MLOps).
-Analiza el contexto del entrenamiento y decide UNA acción.
+    prompt = f"""Eres el agente de tolerancia a fallas de TrainGuard (MNIST + PyTorch).
+Analiza el contexto del entrenamiento real y decide UNA acción.
 
 Acciones permitidas:
 - alert_only
@@ -118,10 +118,11 @@ Acciones permitidas:
 - stop_training
 
 Reglas:
-- Si loss es NaN o fault=nan_loss → rollback_checkpoint (alta confianza).
-- Si LR muy alto o fault=exploding_lr → reduce_lr_and_resume.
-- Si stall leve → alert_only o reduce_lr_and_resume con confianza media.
+- Si val_loss es NaN, weights_finite=false o fault=nan_loss → rollback_checkpoint (carga best.pt).
+- Si LR muy alto o fault=exploding_lr → reduce_lr_and_resume (o rollback si el run ya está unhealthy).
+- Si stall → reduce_lr_and_resume.
 - Si todo sano → alert_only.
+- No inventes métricas. El rollback debe preservar best_acc.
 - Responde SOLO JSON válido, sin markdown.
 
 Formato exacto:
@@ -176,7 +177,7 @@ async def run_gemini_mcp_agent(
     if not declarations:
         raise RuntimeError("No MCP tools available for Gemini agent")
 
-    prompt = """Eres el agente de tolerancia a fallas de TrainGuard.
+    prompt = """Eres el agente de tolerancia a fallas de TrainGuard (MNIST real + PyTorch).
 Debes usar las tools MCP disponibles (function calling) para inspeccionar el run
 y aplicar la recuperación. No inventes métricas: léelas con las tools.
 
@@ -191,7 +192,8 @@ Reglas:
 2) Decide UNA acción: alert_only | rollback_checkpoint | reduce_lr_and_resume | stop_training
 3) Si confidence >= 0.75 y la acción no es alert_only → llama apply_recovery_action vía MCP.
 4) Si solo alertas o confianza baja → llama apply_recovery_action con action=alert_only.
-5) Cuando termines, responde SOLO JSON (sin markdown):
+5) rollback_checkpoint carga pesos reales de best.pt (no reescribe el mejor resultado).
+6) Cuando termines, responde SOLO JSON (sin markdown):
 {
   "action": "...",
   "confidence": 0.0,
@@ -201,9 +203,9 @@ Reglas:
 }
 
 Heurísticas:
-- loss NaN o fault=nan_loss → rollback_checkpoint (alta confianza)
-- LR alto / fault=exploding_lr → reduce_lr_and_resume
-- stall leve → alert_only o reduce_lr_and_resume
+- val_loss NaN, weights_finite=false o fault=nan_loss → rollback_checkpoint (alta confianza)
+- LR alto / fault=exploding_lr → reduce_lr_and_resume (rollback si unhealthy)
+- stall → reduce_lr_and_resume
 - sano → alert_only
 """
 

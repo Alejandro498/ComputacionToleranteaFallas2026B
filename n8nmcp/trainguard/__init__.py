@@ -1,3 +1,3 @@
-"""TrainGuard: monitoring and fault-tolerant recovery for toy NN training."""
+"""TrainGuard: fault-tolerant recovery for a real MNIST training run."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
