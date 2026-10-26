@@ -26,7 +26,7 @@ n8n Cloud no habla MCP stdio. El bridge (`python -m trainguard.bridge.app`, puer
 
 ## Por qué n8n y MCP juntos
 
-Cada uno resuelve una mitad distinta del problema. Juntos forman el watchdog.
+Cada uno resuelve una mitad distinta del problema. Juntos arman el experimento.
 
 | | n8n | MCP |
 | --- | --- | --- |
@@ -321,62 +321,13 @@ En `runs/<run_id>/` quedan `best.pt`, `last.pt` y `epoch_XXX.pt`.
 
 ## Posibles mejoras
 
-<<<<<<< HEAD
 - Watchdog: entrenar en loop y recuperar solo cuando las métricas se rompen, sin nodo Inject.
 - Más fallas: OOM, proceso colgado, dataset corrupto.
-- Human-in-the-loop si `confidence` es baja (Slack/Discord) antes de aplicar.
-- Resources MCP (`metrics://latest`), auth en tools como `inject_fault`.
+- Human-in-the-loop si `confidence` es baja (Slack o Discord) antes de aplicar.
+- Resources MCP (`metrics://latest`) y auth en tools como `inject_fault`.
 - Cron en n8n que solo haga `analyze`.
 - Informe de incidente por run (Markdown o PDF).
 - Docker Compose y un túnel estable en lugar de ngrok free.
-=======
-
-## Posibles mejoras a futuro
-
-
-
-### Entrenamiento más real
-
-- Sustituir la simulación de `engine.py` por un entrenamiento real (PyTorch/TensorFlow) con MNIST/CIFAR pequeño.
-- Guardar checkpoints `.pt` / `.ckpt` de verdad y validar integridad (checksum) antes del rollback.
-- Integrar métricas de W&B, MLflow o TensorBoard en lugar del JSON local.
-
-
-
-### Más fallas y políticas
-
-- Nuevas fallas: OOM de GPU, proceso colgado, dataset corrupto, drift de clases.
-- Réplicas con distinta seed y “consenso” (descartar el run anómalo).
-- Modo degradado: si no hay checkpoint sano, entrenar con batch más chico / modelo más ligero.
-- Human-in-the-loop: si `confidence < umbral`, n8n pide aprobación en Slack/Discord antes de aplicar.
-
-
-
-### MCP / agente
-
-- Probar `GEMINI_MODEL=gemini-3.8-flash` u otros modelos.
-- Resources MCP (no solo tools): exponer `metrics://latest` o el runbook como recurso.
-- Auth y scopes en tools peligrosas (`stop_training`, `inject_fault`).
-- Dejar que Gemini también elija el `mode` del workflow n8n (no solo analyze).
-
-
-
-### n8n / automatización
-
-- Cron periódico que solo haga `analyze`, sin demos manuales.
-- Notificaciones (Slack/Discord/Email) con el `mcp_story` y link al dashboard.
-- Webhook de GitHub/CI: si fallan tests del trainer, disparar TrainGuard.
-- Cola de reintentos si el bridge o ngrok caen.
-
-
-
-### Observabilidad y UI
-
-- Persistir el feed MCP y graficar historial de recuperaciones.
-- Dashboard con curva loss/accuracy en vivo y marca del rollback.
-- Informe de incidente PDF/Markdown por run.
-- Multi-run en el dashboard.
->>>>>>> 116af82afff69b5d8a6cf30d36653b6084887bc6
 
 ---
 
