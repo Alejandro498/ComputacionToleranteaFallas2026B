@@ -242,13 +242,9 @@ Camino `demo` (el del botón Iniciar):
 
 ## Qué se ve en el dashboard
 
-Demo completa: el botón **Iniciar** dispara n8n y el dashboard muestra las tools MCP, la falla y la recuperación.
+Demo completa: el botón **Iniciar** dispara n8n y el dashboard muestra las tools MCP, la falla y la recuperación. Pulsa la imagen para abrir el video (`Imagenes/n8nmcp.mp4`).
 
-<video src="https://github.com/Alejandro498/ComputacionToleranteaFallas2026B/raw/main/n8nmcp/Imagenes/n8nmcp.mp4" controls width="100%"></video>
-
-[Abrir el video](Imagenes/n8nmcp.mp4) si el reproductor no carga (hace falta que el `.mp4` esté en `main`).
-
-![Dashboard al terminar un demo con nan_loss](Imagenes/dashboard_mcp.png)
+[![Demo TrainGuard: abre el video](Imagenes/dashboard_mcp.png)](Imagenes/n8nmcp.mp4)
 
 Arriba quedan tres papeles fijos: **n8n** orquesta, el **bridge** traduce HTTP a MCP, y **MCP** entrena y recupera. Debajo, cada paso muestra el nodo de n8n y la tool MCP. La gráfica pinta en verde las épocas sanas, en rojo el NaN y en ámbar el rollback. El recuadro de recuperación resume si el mejor resultado sobrevivió.
 
