@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+logs/
+salida/
+airflow.cfg
+airflow.db
+airflow.db-journal
+airflow.db-wal
+airflow.db-shm
+simple_auth_manager_passwords.json.generated
+webserver_config.py
+standalone_admin_password.txt
