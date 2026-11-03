@@ -37,6 +37,14 @@ Falla **transitoria de red** (timeout). Para que se vea en la corrida, el primer
 
 **Reintentos de la task** (`retries=2`, espera de 2 segundos). Airflow reejecuta `extraer` y, cuando termina bien, sigue con `transformar` y `cargar`. Esas dos no tienen `retries`.
 
+En la consola, el intento 1 llega a `Task failed with exception` por el timeout simulado:
+
+![Intento 1: falla transitoria simulada](Imagenes/consola_falla.png)
+
+Airflow marca esa task `up_for_retry` y deja `transformar` y `cargar` sin correr. Dos segundos después el intento 2 hace el `GET` y responde `API OK: 100 posts`:
+
+![Reintento: up_for_retry y el GET del intento 2](Imagenes/consola_reintento.png)
+
 ---
 
 ## Cómo está armado
@@ -46,6 +54,9 @@ Falla **transitoria de red** (timeout). Para que se vea en la corrida, el primer
 | `dags/etl_posts.py` | DAG `etl_posts`: extraer → transformar → cargar |
 | `requirements.txt` | Airflow 3.3.2 con el archivo de constraints oficial |
 | `salida/resumen_posts.json` | Resumen generado al correr (gitignorado) |
+| `Imagenes/consola_falla.png` | Intento 1: timeout simulado |
+| `Imagenes/consola_reintento.png` | `up_for_retry` y el GET del intento 2 |
+| `Imagenes/consola_fin.png` | Resumen guardado y `state=success` |
 
 El DAG no tiene horario (`schedule=None`): se dispara a mano o con `dag.test()`.
 
@@ -73,6 +84,10 @@ Airflow avisa que en Windows no está soportado como servicio. Este archivo igua
 1. **extraer** — intento 1: timeout simulado. Intento 2: `GET` de los posts.
 2. **transformar** — cuenta posts por `userId`.
 3. **cargar** — escribe `salida/resumen_posts.json`.
+
+Al cerrar, `cargar` imprime la ruta del JSON y el run queda en `state=success`:
+
+![Cierre: resumen guardado y state=success](Imagenes/consola_fin.png)
 
 ---
 
